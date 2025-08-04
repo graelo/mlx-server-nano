@@ -23,3 +23,34 @@ build-backend = "uv_build"
 
 [tool.uv.sources]
 mlx-lm = { git = "https://github.com/graelo/mlx-lm", branch = "feat/tekken" }
+
+[dependency-groups]
+dev = [
+    "psutil>=7.0.0",
+]
+test = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+    "httpx>=0.24.0",  # For TestClient
+]
+
+[tool.coverage.run]
+source = ["src/mlx_server_nano"]
+omit = [
+    "*/tests/*",
+    "*/__pycache__/*",
+    "*/venv/*",
+    "*/.venv/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+]
