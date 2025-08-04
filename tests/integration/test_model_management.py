@@ -27,7 +27,7 @@ class TestModelUnloaderIntegration:
 
     async def test_model_unloader_lifecycle(
         self,
-        clean_model_manager: pytest.Fixture,
+        clean_model_manager,
         test_env_vars: dict[str, int | str | float | bool],
     ) -> None:
         """Test complete model unloader lifecycle."""
@@ -55,7 +55,7 @@ class TestModelUnloaderIntegration:
     async def test_model_loading_with_unloader(
         self,
         mock_load: MagicMock,
-        clean_model_manager: pytest.Fixture,
+        clean_model_manager,
         test_env_vars: dict[str, int | str | float | bool],
     ) -> None:
         """Test model loading integration with unloader."""

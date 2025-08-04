@@ -338,10 +338,12 @@ class TestExampleWithSetupTeardown:
 
     def test_example_with_setup(self):
         """Example test that uses setup data."""
+        assert self.test_data is not None
         assert self.test_data["counter"] == 0
         self.test_data["counter"] += 1
         assert self.test_data["counter"] == 1
 
     def test_example_isolated_state(self):
         """Example showing tests are isolated (setup runs again)."""
+        assert self.test_data is not None
         assert self.test_data["counter"] == 0  # Reset by setup_method

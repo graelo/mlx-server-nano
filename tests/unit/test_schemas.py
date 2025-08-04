@@ -46,6 +46,7 @@ class TestMessage:
 
         assert message.role == "assistant"
         assert message.content == "I'll call a function"
+        assert message.tool_calls is not None
         assert len(message.tool_calls) == 1
         assert message.tool_calls[0]["id"] == "call_123"
 
@@ -153,6 +154,7 @@ class TestToolChoice:
         choice = ToolChoice(type="function", function={"name": "get_weather"})
 
         assert choice.type == "function"
+        assert choice.function is not None
         assert choice.function["name"] == "get_weather"
 
 
@@ -163,10 +165,11 @@ class TestChatCompletionRequest:
     def test_minimal_request(self):
         """Test creating a minimal chat completion request."""
         request = ChatCompletionRequest(
-            model="test-model", messages=[{"role": "user", "content": "Hello"}]
+            model="test-model", messages=[Message(role="user", content="Hello")]
         )
 
         assert request.model == "test-model"
+        assert request.messages is not None
         assert len(request.messages) == 1
         assert request.messages[0].role == "user"
 
@@ -179,20 +182,20 @@ class TestChatCompletionRequest:
     def test_complete_request(self):
         """Test creating a complete chat completion request."""
         messages = [
-            {"role": "user", "content": "Hello"},
-            {"role": "assistant", "content": "Hi there!"},
-            {"role": "user", "content": "How are you?"},
+            Message(role="user", content="Hello"),
+            Message(role="assistant", content="Hi there!"),
+            Message(role="user", content="How are you?"),
         ]
 
         tools = [
-            {
-                "type": "function",
-                "function": {
-                    "name": "get_weather",
-                    "description": "Get weather",
-                    "parameters": {"type": "object"},
-                },
-            }
+            Tool(
+                type="function",
+                function=Function(
+                    name="get_weather",
+                    description="Get weather",
+                    parameters={"type": "object"},
+                ),
+            )
         ]
 
         request = ChatCompletionRequest(
@@ -207,11 +210,13 @@ class TestChatCompletionRequest:
         )
 
         assert request.model == "gpt-4"
+        assert request.messages is not None
         assert len(request.messages) == 3
         assert request.max_tokens == 100
         assert request.temperature == 0.7
         assert request.top_p == 0.9
         assert request.stream is True
+        assert request.tools is not None
         assert len(request.tools) == 1
         assert request.tool_choice == "auto"
 
@@ -225,7 +230,7 @@ class TestChatCompletionRequest:
         # Valid temperature
         request = ChatCompletionRequest(
             model="test-model",
-            messages=[{"role": "user", "content": "test"}],
+            messages=[Message(role="user", content="test")],
             temperature=0.5,
         )
         assert request.temperature == 0.5
@@ -233,7 +238,7 @@ class TestChatCompletionRequest:
         # Temperature too high should still be accepted (API will handle)
         request = ChatCompletionRequest(
             model="test-model",
-            messages=[{"role": "user", "content": "test"}],
+            messages=[Message(role="user", content="test")],
             temperature=2.5,
         )
         assert request.temperature == 2.5
@@ -245,7 +250,7 @@ class TestChatCompletionRequest:
         # Should work with mixed types
         request = ChatCompletionRequest(
             model="test-model",
-            messages=[message, {"role": "assistant", "content": "Hi"}],
+            messages=[message, Message(role="assistant", content="Hi")],
         )
 
         assert len(request.messages) == 2
@@ -267,6 +272,8 @@ class TestToolCall:
 
         assert tool_call.id == "call_123"
         assert tool_call.name == "get_weather"
+        assert tool_call.arguments is not None
+        assert isinstance(tool_call.arguments, dict)
         assert tool_call.arguments["location"] == "San Francisco"
 
     def test_tool_call_with_string_arguments(self):

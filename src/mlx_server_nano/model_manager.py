@@ -21,7 +21,8 @@ import time
 from typing import List, Optional, Tuple
 
 import mlx.core as mx
-from mlx_lm import generate, load, stream_generate
+from mlx_lm.generate import generate, stream_generate
+from mlx_lm.utils import load
 
 from .chat_templates import format_messages_for_model
 from .config import config
@@ -49,14 +50,6 @@ _shutdown_requested = asyncio.Event()
 def get_current_time() -> float:
     """Get current timestamp. Separate function for easier testing."""
     return time.time()
-
-
-def _unload_model() -> None:
-    """Internal function to unload the current model and reset state."""
-    global _loaded_model, _model_name
-    logger.info(f"Unloading model '{_model_name}' due to inactivity")
-    _loaded_model = None
-    _model_name = None
 
 
 async def _model_unloader_background_task() -> None:

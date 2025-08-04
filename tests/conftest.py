@@ -112,11 +112,12 @@ async def clean_model_manager():
         try:
             await asyncio.wait_for(model_manager._model_unloader_task, timeout=1.0)
         except asyncio.TimeoutError:
-            model_manager._model_unloader_task.cancel()
-            try:
-                await model_manager._model_unloader_task
-            except asyncio.CancelledError:
-                pass
+            if model_manager._model_unloader_task is not None:
+                model_manager._model_unloader_task.cancel()
+                try:
+                    await model_manager._model_unloader_task  # pyright: ignore[reportGeneralTypeIssues]
+                except asyncio.CancelledError:
+                    pass
 
     # Restore original state (best effort)
     model_manager._loaded_model = original_model

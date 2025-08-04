@@ -114,6 +114,7 @@ The function has been called."""
 
         content, tool_calls = parser.parse_tool_calls(response)
 
+        assert content is not None
         assert "I'll help you get the weather." in content
         assert "The function has been called." in content
         assert "[TOOL_CALLS]" not in content
@@ -138,6 +139,7 @@ Both functions called."""
         assert len(tool_calls) == 2
         assert tool_calls[0].name == "get_weather"
         assert tool_calls[1].name == "calculate"
+        assert content is not None
         assert "[TOOL_CALLS]" not in content
 
     def test_parse_tool_calls_invalid_json(self):
@@ -152,6 +154,7 @@ Function called."""
         content, tool_calls = parser.parse_tool_calls(response)
 
         # Should still return remaining content but no tool calls due to invalid JSON
+        assert content is not None
         assert "I'll call a function." in content
         assert "Function called." in content
         assert len(tool_calls) == 0
@@ -210,6 +213,7 @@ The weather function has been called."""
 
         content, tool_calls = parser.parse_tool_calls(response)
 
+        assert content is not None
         assert "I'll get the weather for you." in content
         assert "The weather function has been called." in content
         assert "✿FUNCTION✿" not in content
@@ -311,8 +315,13 @@ Weather function called successfully."""
         # Arguments are stored as JSON string, so parse them
         import json
 
-        args = json.loads(tool_calls[0].arguments)
+        assert tool_calls[0].arguments is not None
+        if isinstance(tool_calls[0].arguments, str):
+            args = json.loads(tool_calls[0].arguments)
+        else:
+            args = tool_calls[0].arguments
         assert args["location"] == "Boston"
+        assert content is not None
         assert "Weather function called successfully." in content
 
     def test_qwen_end_to_end(self):

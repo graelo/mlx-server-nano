@@ -21,7 +21,9 @@ class Message(BaseModel):
 
     role: str
     content: Optional[str] = None
-    tool_calls: Optional[List[Dict[str, Any]]] = None
+    tool_calls: Optional[List[Dict[str, Any]]] = (
+        None  # Always check for None before using
+    )
     tool_call_id: Optional[str] = None
 
 
@@ -56,7 +58,7 @@ class ChatCompletionRequest(BaseModel):
     temperature: Optional[float] = None
     top_p: Optional[float] = None
     stream: Optional[bool] = False
-    tools: Optional[List[Tool]] = None
+    tools: Optional[List[Tool]] = None  # Always check for None before using
     tool_choice: Optional[Union[str, ToolChoice]] = "auto"
 
     @field_validator("messages")

@@ -19,7 +19,7 @@ import os
 import time
 import uuid
 from contextlib import asynccontextmanager
-from typing import AsyncGenerator, Generator, Callable
+from typing import AsyncGenerator, Generator, Callable, Any
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
@@ -31,7 +31,7 @@ from .model_manager import (
     start_model_unloader,
     stop_model_unloader,
 )
-from .schemas import ChatCompletionRequest, Message, Tool
+from .schemas import ChatCompletionRequest, Message, Tool, ToolCall
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -167,9 +167,15 @@ def _create_streaming_headers() -> dict[str, str]:
     }
 
 
-def _create_chat_response_message(content: str, tool_calls: list) -> dict:
+def _create_chat_response_message(
+    content: str, tool_calls: list[ToolCall]
+) -> dict[str, Any]:
     """Create a properly formatted response message."""
-    response_message = {"role": "assistant", "content": content}
+    # Ensure content is always a string
+    response_message: dict[str, Any] = {
+        "role": "assistant",
+        "content": content if content is not None else "",
+    }
 
     if tool_calls:
         logger.debug(f"Adding {len(tool_calls)} tool calls to response")
@@ -183,8 +189,8 @@ def _create_chat_response_message(content: str, tool_calls: list) -> dict:
 def _create_chat_completion_response(
     model: str,
     message: dict,
-    tool_calls: list,
-) -> dict:
+    tool_calls: list[ToolCall],
+) -> dict[str, Any]:
     """Create a properly formatted chat completion response."""
     return {
         "id": f"chatcmpl-{uuid.uuid4().hex[:8]}",
@@ -260,7 +266,7 @@ def chat_completion(body: ChatCompletionRequest) -> object:
         )
 
         # Build the response
-        response_message = _create_chat_response_message(content, tool_calls)
+        response_message = _create_chat_response_message(content, tool_calls)  # pyright: ignore[reportArgumentType]
         response = _create_chat_completion_response(
             body.model, response_message, tool_calls
         )
