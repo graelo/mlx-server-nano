@@ -1,42 +1,71 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import StreamingResponse
+"""
+MLX Server Nano - OpenAI-compatible API server for Apple Silicon
+
+A lightweight FastAPI server that provides OpenAI-compatible chat completion endpoints
+using Apple's MLX framework for running language models efficiently on Apple Silicon.
+
+Features:
+- OpenAI API compatibility
+- Streaming and non-streaming responses
+- Tool calling support
+- Automatic model management with caching
+- Multi-model support with appropriate chat templates
+"""
+
+import argparse
+import json
+import logging
+import os
 import time
 import uuid
-import argparse
-import os
-import logging
-import traceback
-import json
 
-from .schemas import ChatCompletionRequest
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
+
+from .config import config
 from .model_manager import (
     generate_response_with_tools,
     generate_response_stream,
-    get_available_models,
 )
-from .config import config
+from .schemas import ChatCompletionRequest
 
 # Set up logging
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="MLX OpenAI-Compatible API", version="0.2.0")
+app = FastAPI(
+    title="MLX OpenAI-Compatible API",
+    version="0.2.0",
+    description="OpenAI-compatible API server for Apple Silicon using MLX",
+)
 
 
 def create_streaming_response(
     model_name: str, messages, tools, max_tokens, temperature
 ):
-    """Create a streaming response generator for chat completions"""
+    """
+    Create a streaming response generator for chat completions.
+
+    Args:
+        model_name: Name of the model to use for generation
+        messages: List of conversation messages
+        tools: Optional list of available tools
+        max_tokens: Maximum tokens to generate
+        temperature: Sampling temperature
+
+    Returns:
+        Generator function that yields SSE-formatted streaming chunks
+    """
 
     def generate():
-        print("[DEBUG] Starting streaming generator")
-        logger.debug("Starting streaming generator")
+        """Generator function that streams chat completion chunks in OpenAI format."""
+        logger.debug("Starting streaming generation")
+
         try:
             # Create the completion ID and metadata
             completion_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
             created_time = int(time.time())
 
             # Get the streaming generator from model_manager
-            print("[DEBUG] Creating streaming generator from model_manager")
             logger.debug("Creating streaming generator from model_manager")
             stream_generator = generate_response_stream(
                 model_name=model_name,
@@ -46,14 +75,14 @@ def create_streaming_response(
                 temperature=temperature,
             )
 
-            print("[DEBUG] Starting to iterate over stream_generator")
             logger.debug("Starting to iterate over stream_generator")
-            # Stream each chunk as it comes from the model
             chunk_count = 0
+
+            # Stream each chunk as it comes from the model
             for chunk in stream_generator:
                 chunk_count += 1
-                print(f"[DEBUG] Yielding chunk {chunk_count}: {chunk}")
                 logger.debug(f"Yielding chunk {chunk_count}: {chunk}")
+
                 chunk_data = {
                     "id": completion_id,
                     "object": "chat.completion.chunk",
@@ -77,7 +106,7 @@ def create_streaming_response(
                     {
                         "index": 0,
                         "delta": {},
-                        "finish_reason": "stop",  # For now, always stop (tool calls in streaming need more work)
+                        "finish_reason": "stop",  # Note: tool calls in streaming need future enhancement
                     }
                 ],
             }
@@ -90,6 +119,8 @@ def create_streaming_response(
 
         except Exception as e:
             logger.error(f"Streaming generation failed: {e}", exc_info=True)
+
+            # Send error chunk in OpenAI format
             error_chunk = {
                 "id": f"chatcmpl-{uuid.uuid4().hex[:8]}",
                 "object": "chat.completion.chunk",
@@ -104,9 +135,64 @@ def create_streaming_response(
     return generate
 
 
+def _create_streaming_headers():
+    """Create common headers for streaming responses."""
+    return {
+        "Cache-Control": "no-cache",
+        "Connection": "keep-alive",
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "*",
+    }
+
+
+def _create_chat_response_message(content: str, tool_calls: list) -> dict:
+    """Create a properly formatted response message."""
+    response_message = {"role": "assistant", "content": content}
+
+    if tool_calls:
+        logger.debug(f"Adding {len(tool_calls)} tool calls to response")
+        response_message["tool_calls"] = [
+            {"id": tc.id, "type": tc.type, "function": tc.function} for tc in tool_calls
+        ]
+
+    return response_message
+
+
+def _create_chat_completion_response(
+    model: str, message: dict, tool_calls: list
+) -> dict:
+    """Create a properly formatted chat completion response."""
+    return {
+        "id": f"chatcmpl-{uuid.uuid4().hex[:8]}",
+        "object": "chat.completion",
+        "created": int(time.time()),
+        "model": model,
+        "choices": [
+            {
+                "index": 0,
+                "message": message,
+                "finish_reason": "tool_calls" if tool_calls else "stop",
+            }
+        ],
+        "usage": {
+            "prompt_tokens": 0,  # MLX doesn't provide token counts
+            "completion_tokens": 0,
+            "total_tokens": 0,
+        },
+    }
+
+
 @app.post("/v1/chat/completions")
 def chat_completion(body: ChatCompletionRequest):
-    print(f"[DEBUG] Chat completion request - stream: {body.stream}")
+    """
+    Handle chat completion requests with support for both streaming and non-streaming modes.
+
+    Supports:
+    - OpenAI-compatible API format
+    - Tool calling functionality
+    - Real-time streaming responses
+    - Non-streaming batch responses
+    """
     logger.info(
         f"Chat completion request - model: {body.model}, messages: {len(body.messages)}, stream: {body.stream}"
     )
@@ -114,9 +200,8 @@ def chat_completion(body: ChatCompletionRequest):
 
     # Handle streaming requests
     if body.stream:
-        print("[DEBUG] === STREAMING REQUEST DETECTED ===")
-        logger.info("=== STREAMING REQUEST DETECTED ===")
-        logger.info("Handling streaming request")
+        logger.info("Processing streaming request")
+
         generator = create_streaming_response(
             model_name=body.model,
             messages=body.messages,
@@ -124,22 +209,17 @@ def chat_completion(body: ChatCompletionRequest):
             max_tokens=body.max_tokens,
             temperature=body.temperature,
         )
-        print("[DEBUG] Created streaming generator, returning StreamingResponse")
+
         logger.info("Created streaming generator, returning StreamingResponse")
         return StreamingResponse(
             generator(),
             media_type="text/event-stream",
-            headers={
-                "Cache-Control": "no-cache",
-                "Connection": "keep-alive",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Headers": "*",
-            },
+            headers=_create_streaming_headers(),
         )
 
-    # Handle non-streaming requests (existing logic)
-    print("[DEBUG] === NON-STREAMING REQUEST ===")
-    logger.info("=== NON-STREAMING REQUEST ===")
+    # Handle non-streaming requests
+    logger.info("Processing non-streaming request")
+
     try:
         # Generate response with tool calling support
         logger.debug("Calling generate_response_with_tools")
@@ -155,39 +235,11 @@ def chat_completion(body: ChatCompletionRequest):
             f"Response generated - content: {len(content) if content else 0} chars, tool_calls: {len(tool_calls)}"
         )
 
-        # Prepare the response message
-        response_message = {
-            "role": "assistant",
-            "content": content,
-        }
-
-        # Add tool calls if any were detected
-        if tool_calls:
-            logger.debug(f"Adding {len(tool_calls)} tool calls to response")
-            response_message["tool_calls"] = [
-                {"id": tc.id, "type": tc.type, "function": tc.function}
-                for tc in tool_calls
-            ]
-
         # Build the response
-        response = {
-            "id": f"chatcmpl-{uuid.uuid4().hex[:8]}",
-            "object": "chat.completion",
-            "created": int(time.time()),
-            "model": body.model,
-            "choices": [
-                {
-                    "index": 0,
-                    "message": response_message,
-                    "finish_reason": "tool_calls" if tool_calls else "stop",
-                }
-            ],
-            "usage": {
-                "prompt_tokens": 0,  # MLX doesn't provide token counts
-                "completion_tokens": 0,
-                "total_tokens": 0,
-            },
-        }
+        response_message = _create_chat_response_message(content, tool_calls)
+        response = _create_chat_completion_response(
+            body.model, response_message, tool_calls
+        )
 
         logger.info(f"Chat completion successful - response ID: {response['id']}")
         logger.debug(f"Full response: {response}")
@@ -203,23 +255,22 @@ def chat_completion(body: ChatCompletionRequest):
 
 @app.get("/v1/models")
 def list_models():
-    """List available models"""
+    """
+    List available models.
+
+    Note: This server supports on-demand loading of any MLX-compatible model
+    from Hugging Face Hub. Specify the model name directly in your requests.
+    Popular models are available from the mlx-community organization.
+    """
     logger.info("Models list requested")
     try:
-        available_model_names = get_available_models()
+        # Since we support on-demand loading from HF Hub, return minimal response
         available_models = []
 
-        for model_name in available_model_names:
-            available_models.append(
-                {
-                    "id": model_name,
-                    "object": "model",
-                    "created": int(time.time()),
-                    "owned_by": "mlx-server",
-                }
-            )
+        # Note: Could optionally add a few example models here, but keeping it empty
+        # to avoid confusion about what models are "available" vs "can be loaded"
 
-        logger.info(f"Returning {len(available_models)} models")
+        logger.info("Returning empty models list (on-demand loading supported)")
         return {
             "object": "list",
             "data": available_models,

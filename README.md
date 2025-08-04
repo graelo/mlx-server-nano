@@ -107,8 +107,9 @@ The server uses **Hugging Face Hub exclusively** with standard HF caching:
 2. **Standard HF Cache**: Uses Hugging Face's standard cache system (respects HF_HOME, etc.)
 3. **No Custom Cache**: No additional local caching beyond what HF provides
 4. **MLX-Optimized Models**: Works best with models from the `mlx-community` organization
+5. **On-Demand Loading**: Any MLX-compatible model can be loaded on-demand by specifying its name
 
-Popular models that work well:
+**You can use any MLX-compatible model from Hugging Face Hub** by specifying its full name in your requests. Popular choices include:
 - `mlx-community/Qwen2.5-7B-Instruct-4bit`
 - `mlx-community/Qwen2.5-14B-Instruct-4bit`
 - `mlx-community/Meta-Llama-3.1-8B-Instruct-4bit`
@@ -116,6 +117,8 @@ Popular models that work well:
 - `mlx-community/CodeLlama-7b-Instruct-hf-4bit`
 
 The MLX library will automatically download models from HF Hub on first use and cache them using Hugging Face's standard caching mechanism.
+
+**Note**: The `/v1/models` endpoint returns an empty list since models are loaded on-demand. Simply specify any MLX-compatible model name in your chat completion requests.
 
 ## Tool Calling
 

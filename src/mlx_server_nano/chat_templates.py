@@ -1,3 +1,15 @@
+"""
+Chat template formatting for different language models
+
+Provides model-specific chat template formatting for conversation messages and tool calling.
+Each model requires specific formatting to work optimally with their training templates.
+
+Supported Models:
+- Devstral: Uses [INST]/[/INST], [SYSTEM_PROMPT], [AVAILABLE_TOOLS], [TOOL_CALLS] format
+- Qwen3: Uses <|im_start|>/<|im_end|> format with ✿FUNCTION✿/✿ARGS✿ tool calling
+- Generic: Basic fallback format for unknown models
+"""
+
 import json
 import logging
 from typing import Optional
@@ -11,8 +23,20 @@ logger = logging.getLogger(__name__)
 def format_messages_for_model(
     messages: list[Message], model_name: str, tools: Optional[list[Tool]] = None
 ) -> str:
-    """Format messages using model-specific chat template"""
+    """
+    Format messages using model-specific chat template.
 
+    Args:
+        messages: List of conversation messages
+        model_name: Name of the model to format for
+        tools: Optional list of available tools
+
+    Returns:
+        Formatted prompt string ready for the model
+
+    Raises:
+        Exception: If formatting fails for any reason
+    """
     logger.debug(
         f"Formatting messages for model: {model_name}, message count: {len(messages)}, tools: {len(tools) if tools else 0}"
     )
@@ -28,7 +52,6 @@ def format_messages_for_model(
             return format_qwen3_messages(messages, tools)
         else:
             logger.debug("Using generic formatting")
-            # Default format
             return format_generic_messages(messages, tools)
     except Exception as e:
         logger.error(
@@ -40,7 +63,16 @@ def format_messages_for_model(
 def format_devstral_messages(
     messages: list[Message], tools: Optional[list[Tool]] = None
 ) -> str:
-    """Format messages for Devstral using its chat template"""
+    """
+    Format messages for Devstral using its chat template.
+
+    Args:
+        messages: List of conversation messages
+        tools: Optional list of available tools
+
+    Returns:
+        Formatted prompt string for Devstral model
+    """
     prompt = ""
 
     # Find the last user message for tool insertion
@@ -88,7 +120,16 @@ def format_devstral_messages(
 def format_qwen3_messages(
     messages: list[Message], tools: Optional[list[Tool]] = None
 ) -> str:
-    """Format messages for Qwen3 using its chat template"""
+    """
+    Format messages for Qwen3 using its chat template.
+
+    Args:
+        messages: List of conversation messages
+        tools: Optional list of available tools
+
+    Returns:
+        Formatted prompt string for Qwen3 model
+    """
     prompt = ""
 
     # Handle system message and tools
@@ -116,7 +157,7 @@ def format_qwen3_messages(
         elif message.role == "user":
             prompt += f"<|im_start|>user\n{message.content}<|im_end|>\n"
         elif message.role == "assistant":
-            prompt += f"<|im_start|>assistant\n"
+            prompt += "<|im_start|>assistant\n"
             if message.tool_calls:
                 for tc in message.tool_calls:
                     func_name = tc["function"]["name"]
@@ -137,7 +178,16 @@ def format_qwen3_messages(
 def format_generic_messages(
     messages: list[Message], tools: Optional[list[Tool]] = None
 ) -> str:
-    """Generic message formatting"""
+    """
+    Generic message formatting for unknown models.
+
+    Args:
+        messages: List of conversation messages
+        tools: Optional list of available tools (ignored in generic format)
+
+    Returns:
+        Basic formatted prompt string
+    """
     prompt = ""
     for message in messages:
         prompt += f"{message.role}: {message.content}\n"

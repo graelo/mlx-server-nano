@@ -1,8 +1,22 @@
+"""
+Tool calling support for MLX Server Nano
+
+Provides model-specific tool call parsing and formatting for different language models.
+Supports both Devstral and Qwen3 model formats with extensible parser architecture.
+
+Features:
+- Model-specific tool call formatting
+- Tool call parsing from model responses
+- Extensible parser architecture for new models
+- JSON validation and error handling
+"""
+
 import json
+import logging
 import re
 import uuid
-import logging
 from typing import Optional
+
 from .schemas import Tool, ToolCall
 
 # Set up logging
@@ -10,22 +24,39 @@ logger = logging.getLogger(__name__)
 
 
 class ToolCallParser:
-    """Base class for model-specific tool call parsing"""
+    """Base class for model-specific tool call parsing."""
 
     def format_tools_for_prompt(self, tools: list[Tool]) -> str:
-        """Format tools for inclusion in the prompt"""
+        """
+        Format tools for inclusion in the prompt.
+
+        Args:
+            tools: List of available tools
+
+        Returns:
+            Formatted string to include in model prompt
+        """
         raise NotImplementedError
 
     def parse_tool_calls(self, response: str) -> tuple[Optional[str], list[ToolCall]]:
-        """Parse tool calls from model response. Returns (content, tool_calls)"""
+        """
+        Parse tool calls from model response.
+
+        Args:
+            response: Raw model response text
+
+        Returns:
+            Tuple of (content, tool_calls) where content is the cleaned text
+            and tool_calls is a list of parsed tool calls
+        """
         raise NotImplementedError
 
 
 class DevstralToolCallParser(ToolCallParser):
-    """Tool call parser for Devstral models"""
+    """Tool call parser for Devstral models using [AVAILABLE_TOOLS] and [TOOL_CALLS] format."""
 
     def format_tools_for_prompt(self, tools: list[Tool]) -> str:
-        """Format tools for Devstral's [AVAILABLE_TOOLS] format"""
+        """Format tools for Devstral's [AVAILABLE_TOOLS] format."""
         tool_specs = []
         for tool in tools:
             tool_spec = {
@@ -37,7 +68,7 @@ class DevstralToolCallParser(ToolCallParser):
         return json.dumps(tool_specs, indent=2)
 
     def parse_tool_calls(self, response: str) -> tuple[Optional[str], list[ToolCall]]:
-        """Parse Devstral's [TOOL_CALLS][...] format"""
+        """Parse Devstral's [TOOL_CALLS][...] format."""
         tool_calls = []
         content = response
 
@@ -65,17 +96,17 @@ class DevstralToolCallParser(ToolCallParser):
                 ).strip()
 
             except (json.JSONDecodeError, KeyError) as e:
-                print(f"Failed to parse tool call: {e}")
+                logger.error(f"Failed to parse tool call: {e}")
                 continue
 
         return content if content else None, tool_calls
 
 
 class Qwen3ToolCallParser(ToolCallParser):
-    """Tool call parser for Qwen3 models"""
+    """Tool call parser for Qwen3 models using ✿FUNCTION✿/✿ARGS✿ format."""
 
     def format_tools_for_prompt(self, tools: list[Tool]) -> str:
-        """Format tools for Qwen3's system prompt format"""
+        """Format tools for Qwen3's system prompt format."""
         tool_descriptions = []
         for tool in tools:
             desc = f"### {tool.function.name}\n\n"
@@ -87,16 +118,16 @@ class Qwen3ToolCallParser(ToolCallParser):
         function_names = [tool.function.name for tool in tools]
         tools_section = "## Tools\n\nYou have access to the following tools:\n\n"
         tools_section += "".join(tool_descriptions)
-        tools_section += f"## When you need to call a tool, please insert the following command in your reply:\n\n"
+        tools_section += "## When you need to call a tool, please insert the following command in your reply:\n\n"
         tools_section += f"✿FUNCTION✿: The tool to use, should be one of [{', '.join(function_names)}]\n"
-        tools_section += f"✿ARGS✿: The input of the tool\n"
-        tools_section += f"✿RESULT✿: Tool results\n"
-        tools_section += f"✿RETURN✿: Reply based on tool results\n"
+        tools_section += "✿ARGS✿: The input of the tool\n"
+        tools_section += "✿RESULT✿: Tool results\n"
+        tools_section += "✿RETURN✿: Reply based on tool results\n"
 
         return tools_section
 
     def parse_tool_calls(self, response: str) -> tuple[Optional[str], list[ToolCall]]:
-        """Parse Qwen3's ✿FUNCTION✿/✿ARGS✿ format"""
+        """Parse Qwen3's ✿FUNCTION✿/✿ARGS✿ format."""
         tool_calls = []
         content = response
 
@@ -122,7 +153,7 @@ class Qwen3ToolCallParser(ToolCallParser):
                     tool_calls.append(tool_call)
 
                 except json.JSONDecodeError as e:
-                    print(f"Failed to parse tool arguments: {e}")
+                    logger.error(f"Failed to parse tool arguments: {e}")
                     continue
 
         # Remove tool call markers from content
@@ -135,7 +166,15 @@ class Qwen3ToolCallParser(ToolCallParser):
 
 
 def get_tool_parser(model_name: str) -> ToolCallParser:
-    """Get the appropriate tool parser for a model"""
+    """
+    Get the appropriate tool parser for a model.
+
+    Args:
+        model_name: Name of the model to get parser for
+
+    Returns:
+        ToolCallParser instance appropriate for the model
+    """
     logger.debug(f"Getting tool parser for model: {model_name}")
     model_lower = model_name.lower()
 
