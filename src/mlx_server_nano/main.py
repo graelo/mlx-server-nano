@@ -18,6 +18,7 @@ import logging
 import os
 import time
 import uuid
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
@@ -26,16 +27,32 @@ from .config import config
 from .model_manager import (
     generate_response_with_tools,
     generate_response_stream,
+    start_model_unloader,
+    stop_model_unloader,
 )
 from .schemas import ChatCompletionRequest
 
 # Set up logging
 logger = logging.getLogger(__name__)
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Manage application lifespan for background tasks."""
+    # Startup
+    logger.info("Starting MLX Server Nano")
+    await start_model_unloader()
+    yield
+    # Shutdown
+    logger.info("Shutting down MLX Server Nano")
+    await stop_model_unloader()
+
+
 app = FastAPI(
     title="MLX OpenAI-Compatible API",
     version="0.2.0",
     description="OpenAI-compatible API server for Apple Silicon using MLX",
+    lifespan=lifespan,
 )
 
 

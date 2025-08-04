@@ -13,11 +13,14 @@ Features:
 - Tool calling integration
 """
 
+import asyncio
+import gc
 import logging
 import threading
 import time
 from typing import List, Optional, Tuple
 
+import mlx.core as mx
 from mlx_lm import generate, load, stream_generate
 
 from .chat_templates import format_messages_for_model
@@ -35,8 +38,12 @@ MODEL_IDLE_TIMEOUT = config.model_idle_timeout
 _loaded_model = None
 _model_name = None
 _last_used_time = 0
-_unload_timer = None
 _lock = threading.Lock()
+
+# Background task management for model unloading
+_model_unloader_task: Optional[asyncio.Task] = None
+_unload_requested = asyncio.Event()
+_shutdown_requested = asyncio.Event()
 
 
 def get_current_time():
@@ -52,19 +59,158 @@ def _unload_model():
     _model_name = None
 
 
+async def _model_unloader_background_task():
+    """Background task that handles model unloading based on idle timeout."""
+    logger.info("Model unloader background task started")
+
+    while True:
+        try:
+            # Wait for either an unload request or shutdown
+            done, pending = await asyncio.wait(
+                [
+                    asyncio.create_task(_unload_requested.wait()),
+                    asyncio.create_task(_shutdown_requested.wait()),
+                ],
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+
+            # Cancel any pending tasks
+            for task in pending:
+                task.cancel()
+                try:
+                    await task
+                except asyncio.CancelledError:
+                    pass
+
+            # Check what completed
+            if _shutdown_requested.is_set():
+                logger.info("Model unloader background task shutting down")
+                break
+
+            if _unload_requested.is_set():
+                # Clear the event for next time
+                _unload_requested.clear()
+
+                # Wait for the idle timeout period
+                try:
+                    await asyncio.wait_for(
+                        _shutdown_requested.wait(), timeout=MODEL_IDLE_TIMEOUT
+                    )
+                    # If we get here, shutdown was requested
+                    logger.info(
+                        "Model unloader background task shutting down during timeout"
+                    )
+                    break
+                except asyncio.TimeoutError:
+                    # Timeout expired, check if we should unload
+                    with _lock:
+                        if (
+                            get_current_time() - _last_used_time >= MODEL_IDLE_TIMEOUT
+                            and _loaded_model is not None
+                        ):
+                            logger.info(
+                                f"Unloading model '{_model_name}' due to inactivity"
+                            )
+                            _unload_model()
+
+        except Exception as e:
+            logger.error(f"Error in model unloader background task: {e}")
+            await asyncio.sleep(1)  # Brief pause before retrying
+
+
+def _unload_model():
+    """Internal function to unload the current model and reset state with proper memory cleanup."""
+    global _loaded_model, _model_name
+
+    if _loaded_model is None:
+        return  # Nothing to unload
+
+    model_name = _model_name
+    logger.info(f"Unloading model '{model_name}' and freeing memory")
+
+    # Clear the model references first
+    _loaded_model = None
+    _model_name = None
+
+    # Force garbage collection to release Python objects
+    gc.collect()
+
+    # Clear MLX memory cache/buffers using the new API
+    try:
+        # Use the new MLX API (replaces deprecated mx.metal.clear_cache)
+        mx.clear_cache()
+        logger.debug("Cleared MLX memory cache")
+
+    except Exception as e:
+        logger.warning(f"Could not clear MLX cache: {e}")
+
+    # Multiple rounds of garbage collection for stubborn references
+    for i in range(3):
+        collected = gc.collect()
+        if collected > 0:
+            logger.debug(f"GC round {i + 1}: collected {collected} objects")
+
+    # Force memory release by explicitly deleting any lingering references
+    try:
+        # Get all local variables that might hold model references
+        import sys
+
+        frame = sys._getframe()
+        while frame:
+            if frame.f_locals:
+                for var_name, var_value in list(frame.f_locals.items()):
+                    if (
+                        hasattr(var_value, "__class__")
+                        and "mlx" in str(type(var_value)).lower()
+                    ):
+                        try:
+                            del frame.f_locals[var_name]
+                        except Exception:
+                            pass
+            frame = frame.f_back
+    except Exception:
+        pass  # Best effort cleanup
+
+    # Final garbage collection
+    gc.collect()
+
+    logger.info(f"Model '{model_name}' unloaded and memory freed")
+
+
 def _schedule_unload():
     """Schedule model unloading after idle timeout."""
-    global _unload_timer
+    # Simply set the event to trigger the background task
+    if not _shutdown_requested.is_set():
+        _unload_requested.set()
 
-    def unload_after_timeout():
-        """Unload model if it has been idle for the timeout period."""
-        time.sleep(MODEL_IDLE_TIMEOUT)
-        with _lock:
-            if get_current_time() - _last_used_time >= MODEL_IDLE_TIMEOUT:
-                _unload_model()
 
-    _unload_timer = threading.Thread(target=unload_after_timeout, daemon=True)
-    _unload_timer.start()
+async def start_model_unloader():
+    """Start the model unloader background task."""
+    global _model_unloader_task
+
+    if _model_unloader_task is None or _model_unloader_task.done():
+        _model_unloader_task = asyncio.create_task(_model_unloader_background_task())
+        logger.info("Model unloader background task created")
+
+
+async def stop_model_unloader():
+    """Stop the model unloader background task."""
+    global _model_unloader_task
+
+    _shutdown_requested.set()
+
+    if _model_unloader_task and not _model_unloader_task.done():
+        try:
+            await asyncio.wait_for(_model_unloader_task, timeout=5.0)
+        except asyncio.TimeoutError:
+            logger.warning("Model unloader task did not stop gracefully, cancelling")
+            _model_unloader_task.cancel()
+            try:
+                await _model_unloader_task
+            except asyncio.CancelledError:
+                pass
+
+    logger.info("Model unloader background task stopped")
 
 
 def load_model(name: str):
