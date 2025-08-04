@@ -54,7 +54,7 @@ class TestBasicFunctionality:
         assert default_parser is not None
 
     @patch("mlx_server_nano.model_manager.load")
-    def test_mocking_works(self, mock_load):
+    def test_mocking_works(self, mock_load, clean_model_manager):
         """Test that mocking infrastructure works."""
         from mlx_server_nano.model_manager import load_model
 

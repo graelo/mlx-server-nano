@@ -47,7 +47,7 @@ class TestModelUnloaderIntegration:
         await stop_model_unloader()
         assert model_manager._shutdown_requested.is_set()
 
-    @patch("mlx_lm.load")
+    @patch("mlx_server_nano.model_manager.load")
     async def test_model_loading_with_unloader(
         self, mock_load, clean_model_manager, test_env_vars
     ):
@@ -76,7 +76,7 @@ class TestModelUnloaderIntegration:
         finally:
             await stop_model_unloader()
 
-    @patch("mlx_lm.load")
+    @patch("mlx_server_nano.model_manager.load")
     async def test_model_auto_unload_timing(
         self, mock_load, clean_model_manager, test_env_vars
     ):
@@ -104,7 +104,7 @@ class TestModelUnloaderIntegration:
         finally:
             await stop_model_unloader()
 
-    @patch("mlx_lm.load")
+    @patch("mlx_server_nano.model_manager.load")
     async def test_model_cache_reuse_resets_timer(
         self, mock_load, clean_model_manager, test_env_vars
     ):
@@ -141,8 +141,8 @@ class TestModelUnloaderIntegration:
 class TestModelGenerationIntegration:
     """Integration tests for model generation with lifecycle management."""
 
-    @patch("mlx_lm.load")
-    @patch("mlx_lm.generate")
+    @patch("mlx_server_nano.model_manager.load")
+    @patch("mlx_server_nano.model_manager.generate")
     @patch("mlx_server_nano.model_manager.format_messages_for_model")
     @patch("mlx_server_nano.model_manager.get_tool_parser")
     def test_generate_response_complete_flow(
@@ -185,8 +185,8 @@ class TestModelGenerationIntegration:
         mock_generate.assert_called_once()
         mock_parser.parse_tool_calls.assert_called_once_with("model response")
 
-    @patch("mlx_lm.load")
-    @patch("mlx_lm.stream_generate")
+    @patch("mlx_server_nano.model_manager.load")
+    @patch("mlx_server_nano.model_manager.stream_generate")
     @patch("mlx_server_nano.model_manager.format_messages_for_model")
     def test_generate_stream_complete_flow(
         self, mock_format, mock_stream, mock_load, clean_model_manager
@@ -219,7 +219,7 @@ class TestModelGenerationIntegration:
         assert model_manager._loaded_model == (mock_model, mock_tokenizer)
         assert model_manager._last_used_time > 0
 
-    @patch("mlx_lm.load")
+    @patch("mlx_server_nano.model_manager.load")
     def test_multiple_model_requests_caching(self, mock_load, clean_model_manager):
         """Test that multiple requests for same model use cache."""
         # Configure mock
@@ -238,7 +238,7 @@ class TestModelGenerationIntegration:
         # Should only call mlx_lm.load once
         mock_load.assert_called_once_with("test-model")
 
-    @patch("mlx_lm.load")
+    @patch("mlx_server_nano.model_manager.load")
     def test_different_models_replace_cache(self, mock_load, clean_model_manager):
         """Test that loading different models replaces cache."""
         # Configure mocks for different models
@@ -265,7 +265,7 @@ class TestModelGenerationIntegration:
 class TestMemoryManagement:
     """Integration tests for memory management functionality."""
 
-    @patch("mlx_lm.load")
+    @patch("mlx_server_nano.model_manager.load")
     @patch("mlx.core.clear_cache")
     @patch("gc.collect")
     def test_model_unload_memory_cleanup(
@@ -322,18 +322,20 @@ class TestMemoryManagement:
 class TestConcurrentModelAccess:
     """Integration tests for concurrent model access patterns."""
 
-    @patch("mlx_lm.load")
+    @patch("mlx_server_nano.model_manager.load")
     async def test_concurrent_model_loading(self, mock_load, clean_model_manager):
         """Test concurrent requests for same model."""
         # Configure mock with delay to simulate loading time
         mock_model = MagicMock()
         mock_tokenizer = MagicMock()
 
-        async def slow_load(model_name):
-            await asyncio.sleep(0.1)  # Simulate loading time
+        def slow_load(model_name):
+            import time
+
+            time.sleep(0.1)  # Simulate loading time with blocking sleep
             return (mock_model, mock_tokenizer)
 
-        mock_load.side_effect = lambda name: slow_load(name)
+        mock_load.side_effect = slow_load
 
         # Start multiple concurrent loads
         async def load_task():
@@ -352,7 +354,7 @@ class TestConcurrentModelAccess:
             first_result = successful_results[0]
             assert all(r == first_result for r in successful_results)
 
-    @patch("mlx_lm.load")
+    @patch("mlx_server_nano.model_manager.load")
     def test_model_access_thread_safety(self, mock_load, clean_model_manager):
         """Test thread safety of model loading."""
         import threading
@@ -392,7 +394,7 @@ class TestConcurrentModelAccess:
 class TestModelConfigurationIntegration:
     """Integration tests for model configuration handling."""
 
-    @patch("mlx_lm.load")
+    @patch("mlx_server_nano.model_manager.load")
     def test_model_specific_configurations(self, mock_load, clean_model_manager):
         """Test that model-specific configurations are applied."""
         # Configure mock
