@@ -1,7 +1,11 @@
 import json
+import logging
 from typing import Optional
 
 from .schemas import Message, Tool
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 
 def format_messages_for_model(
@@ -9,15 +13,28 @@ def format_messages_for_model(
 ) -> str:
     """Format messages using model-specific chat template"""
 
+    logger.debug(
+        f"Formatting messages for model: {model_name}, message count: {len(messages)}, tools: {len(tools) if tools else 0}"
+    )
+
     model_lower = model_name.lower()
 
-    if "devstral" in model_lower:
-        return format_devstral_messages(messages, tools)
-    elif "qwen3" in model_lower or "qwen" in model_lower:
-        return format_qwen3_messages(messages, tools)
-    else:
-        # Default format
-        return format_generic_messages(messages, tools)
+    try:
+        if "devstral" in model_lower:
+            logger.debug("Using Devstral formatting")
+            return format_devstral_messages(messages, tools)
+        elif "qwen3" in model_lower or "qwen" in model_lower:
+            logger.debug("Using Qwen formatting")
+            return format_qwen3_messages(messages, tools)
+        else:
+            logger.debug("Using generic formatting")
+            # Default format
+            return format_generic_messages(messages, tools)
+    except Exception as e:
+        logger.error(
+            f"Failed to format messages for model {model_name}: {e}", exc_info=True
+        )
+        raise
 
 
 def format_devstral_messages(

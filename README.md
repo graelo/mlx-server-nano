@@ -5,7 +5,8 @@ A lightweight, OpenAI-compatible API server for running language models on Apple
 ## Features
 
 - **OpenAI API Compatible**: Drop-in replacement for OpenAI's chat completions API
-- **Apple Silicon Optimized**: Built specifically for Apple Silicon using MLX framework
+- **Apple Silicon Optimized**: Built specifically for Apple Silicon using MLX framework  
+- **Hugging Face Hub Integration**: Automatically downloads models from HF Hub with local caching
 - **Tool Calling Support**: Full support for function calling with model-specific parsers
 - **Model Management**: Automatic model loading/unloading with configurable idle timeout
 - **Multi-Model Support**: Supports Qwen3 and Devstral models with appropriate chat templates
@@ -50,18 +51,25 @@ The server will start on `http://localhost:8000` by default.
 
 - `--host`: Host to bind to (default: 0.0.0.0)
 - `--port`: Port to bind to (default: 8000)  
-- `--model-cache-dir`: Directory containing models (default: models)
 - `--log-level`: Log level (DEBUG, INFO, WARNING, ERROR, default: INFO)
 - `--reload`: Enable auto-reload for development
 
-### Configuration
+### Environment Variables
 
-Configure the server using environment variables:
+Configure Hugging Face cache behavior using standard HF environment variables:
+
+```bash
+export HF_HOME=/path/to/hf/cache          # Set HF cache directory
+export HUGGINGFACE_HUB_CACHE=/path/cache  # Alternative cache location
+export HF_HUB_OFFLINE=1                   # Use offline mode (cache only)
+export HF_TOKEN=your_token                # For private/gated models
+```
+
+Configure the MLX server:
 
 ```bash
 export MLX_SERVER_HOST=0.0.0.0
 export MLX_SERVER_PORT=8000
-export MLX_MODEL_CACHE_DIR=./models
 export MLX_MODEL_IDLE_TIMEOUT=300
 export MLX_DEFAULT_MAX_TOKENS=512
 export MLX_DEFAULT_TEMPERATURE=0.7
@@ -82,7 +90,7 @@ Example request:
 curl -X POST http://localhost:8000/v1/chat/completions \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "qwen3-30b-a3b-instruct-2507",
+    "model": "mlx-community/Qwen2.5-7B-Instruct-4bit",
     "messages": [
       {"role": "user", "content": "Hello!"}
     ],
@@ -93,11 +101,21 @@ curl -X POST http://localhost:8000/v1/chat/completions \
 
 ## Model Support
 
-Currently supports:
-- **Qwen3** models with custom tool calling format
-- **Devstral** models with bracket-based tool calling
+The server uses **Hugging Face Hub exclusively** with standard HF caching:
 
-Models should be placed in the configured cache directory (default: `./models/`).
+1. **Direct HF Hub Access**: Models are loaded directly using their HF Hub names
+2. **Standard HF Cache**: Uses Hugging Face's standard cache system (respects HF_HOME, etc.)
+3. **No Custom Cache**: No additional local caching beyond what HF provides
+4. **MLX-Optimized Models**: Works best with models from the `mlx-community` organization
+
+Popular models that work well:
+- `mlx-community/Qwen2.5-7B-Instruct-4bit`
+- `mlx-community/Qwen2.5-14B-Instruct-4bit`
+- `mlx-community/Meta-Llama-3.1-8B-Instruct-4bit`
+- `mlx-community/Mistral-7B-Instruct-v0.3-4bit`
+- `mlx-community/CodeLlama-7b-Instruct-hf-4bit`
+
+The MLX library will automatically download models from HF Hub on first use and cache them using Hugging Face's standard caching mechanism.
 
 ## Tool Calling
 

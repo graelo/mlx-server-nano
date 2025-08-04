@@ -30,6 +30,7 @@ class ChatCompletionRequest(BaseModel):
     messages: List[Message]
     max_tokens: Optional[int] = 512
     temperature: Optional[float] = 0.7
+    stream: Optional[bool] = False
     tools: Optional[List[Tool]] = None
     tool_choice: Optional[Union[str, ToolChoice]] = "auto"
 

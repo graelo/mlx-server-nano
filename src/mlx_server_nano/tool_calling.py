@@ -1,8 +1,12 @@
 import json
 import re
 import uuid
+import logging
 from typing import Optional
 from .schemas import Tool, ToolCall
+
+# Set up logging
+logger = logging.getLogger(__name__)
 
 
 class ToolCallParser:
@@ -132,12 +136,16 @@ class Qwen3ToolCallParser(ToolCallParser):
 
 def get_tool_parser(model_name: str) -> ToolCallParser:
     """Get the appropriate tool parser for a model"""
+    logger.debug(f"Getting tool parser for model: {model_name}")
     model_lower = model_name.lower()
 
     if "devstral" in model_lower:
+        logger.debug("Using DevstralToolCallParser")
         return DevstralToolCallParser()
     elif "qwen3" in model_lower or "qwen" in model_lower:
+        logger.debug("Using Qwen3ToolCallParser")
         return Qwen3ToolCallParser()
     else:
+        logger.debug("Using default Qwen3ToolCallParser for unknown model")
         # Default to Qwen3 format for unknown models
         return Qwen3ToolCallParser()
