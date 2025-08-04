@@ -25,7 +25,9 @@ pytest_plugins = ["pytest_asyncio"]
 @pytest.fixture(scope="session")
 def event_loop():
     """Create an instance of the default event loop for the test session."""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
+    policy = asyncio.get_event_loop_policy()
+    loop = policy.new_event_loop()
+    asyncio.set_event_loop(loop)
     yield loop
     loop.close()
 
@@ -237,9 +239,7 @@ def devstral_tool_response():
     """Sample Devstral tool calling response."""
     return """Sure! I'll help you get the weather information.
 
-✿FUNCTION✿
-{"name": "get_weather", "arguments": {"location": "San Francisco"}}
-✿FUNCTION✿
+[TOOL_CALLS][{"name": "get_weather", "arguments": {"location": "San Francisco"}}]
 
 The weather function has been called for San Francisco."""
 
@@ -249,9 +249,10 @@ def qwen_tool_response():
     """Sample Qwen tool calling response."""
     return """I'll help you get the weather information for San Francisco.
 
-<tool_call>
-{"name": "get_weather", "arguments": {"location": "San Francisco"}}
-</tool_call>"""
+✿FUNCTION✿: get_weather
+✿ARGS✿: {"location": "San Francisco"}
+
+The weather function has been called."""
 
 
 # Pytest markers for different test categories

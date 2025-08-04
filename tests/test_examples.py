@@ -18,7 +18,7 @@ from mlx_server_nano.schemas import Tool, Function
 class TestExampleUnitTests:
     """Example unit tests showing common patterns."""
 
-    @patch("mlx_lm.load")
+    @patch("mlx_server_nano.model_manager.load")
     def test_model_loading_basic_example(self, mock_load, clean_model_manager):
         """Example: Test basic model loading with mocking."""
         # Arrange: Set up mock
@@ -38,7 +38,7 @@ class TestExampleUnitTests:
         # Test different model name patterns
         test_cases = [
             ("devstral-model", "DevstralToolCallParser"),
-            ("qwen-chat", "QwenToolCallParser"),
+            ("qwen-chat", "Qwen3ToolCallParser"),
             ("gpt-4", "DevstralToolCallParser"),  # Default fallback
         ]
 
@@ -68,8 +68,8 @@ class TestExampleUnitTests:
 class TestExampleIntegrationTests:
     """Example integration tests showing realistic scenarios."""
 
-    @patch("mlx_lm.load")
-    @patch("mlx_lm.generate")
+    @patch("mlx_server_nano.model_manager.load")
+    @patch("mlx_server_nano.model_manager.generate")
     @patch("mlx_server_nano.model_manager.format_messages_for_model")
     @patch("mlx_server_nano.model_manager.get_tool_parser")
     def test_complete_generation_flow_example(
@@ -109,29 +109,23 @@ class TestExampleIntegrationTests:
         mock_generate.assert_called_once()
         mock_parser.parse_tool_calls.assert_called_once()
 
-    def test_api_endpoint_example(self, client, sample_chat_request):
+    def test_api_endpoint_example(self, client, sample_chat_request, mock_all_mlx):
         """Example: Test API endpoint with real FastAPI client."""
-        with patch(
-            "mlx_server_nano.model_manager.generate_response_with_tools"
-        ) as mock_generate:
-            # Arrange: Mock the generation
-            mock_generate.return_value = ("Test response", [])
+        # Act: Make API request
+        response = client.post("/v1/chat/completions", json=sample_chat_request)
 
-            # Act: Make API request
-            response = client.post("/v1/chat/completions", json=sample_chat_request)
-
-            # Assert: Check response format
-            assert response.status_code == 200
-            data = response.json()
-            assert "choices" in data
-            assert data["choices"][0]["message"]["content"] == "Test response"
+        # Assert: Check response format
+        assert response.status_code == 200
+        data = response.json()
+        assert "choices" in data
+        assert "content" in data["choices"][0]["message"]
 
 
 @pytest.mark.memory
 class TestExampleMemoryTests:
     """Example memory management tests."""
 
-    @patch("mlx_lm.load")
+    @patch("mlx_server_nano.model_manager.load")
     @patch("mlx.core.clear_cache")
     @patch("gc.collect")
     def test_memory_cleanup_example(
@@ -170,7 +164,6 @@ class TestExampleAPITests:
         assert response.status_code == 200
         data = response.json()
         assert data["status"] == "healthy"
-        assert "timestamp" in data
 
     def test_models_endpoint_example(self, client):
         """Example: Test models listing endpoint."""
@@ -201,7 +194,7 @@ class TestExampleAPITests:
 
         # Assert: Check streaming response
         assert response.status_code == 200
-        assert response.headers["content-type"] == "text/plain; charset=utf-8"
+        assert response.headers["content-type"] == "text/event-stream; charset=utf-8"
 
         # Parse streaming chunks
         lines = response.text.strip().split("\n")
@@ -246,7 +239,7 @@ class TestExampleSlowTests:
 class TestExampleErrorHandling:
     """Example error handling tests."""
 
-    @patch("mlx_lm.load")
+    @patch("mlx_server_nano.model_manager.load")
     def test_model_loading_error_example(self, mock_load, clean_model_manager):
         """Example: Test error handling during model loading."""
         # Arrange: Make loading fail

@@ -168,7 +168,7 @@ class TestChatCompletionRequest:
 
         assert request.model == "test-model"
         assert len(request.messages) == 1
-        assert request.messages[0]["role"] == "user"
+        assert request.messages[0].role == "user"
 
         # Test defaults
         assert request.max_tokens is None
@@ -258,7 +258,11 @@ class TestToolCall:
     def test_basic_tool_call(self):
         """Test creating a basic tool call."""
         tool_call = ToolCall(
-            id="call_123", name="get_weather", arguments={"location": "San Francisco"}
+            id="call_123",
+            function={
+                "name": "get_weather",
+                "arguments": {"location": "San Francisco"},
+            },
         )
 
         assert tool_call.id == "call_123"
@@ -268,7 +272,8 @@ class TestToolCall:
     def test_tool_call_with_string_arguments(self):
         """Test tool call with JSON string arguments."""
         tool_call = ToolCall(
-            id="call_456", name="calculate", arguments='{"x": 5, "y": 10}'
+            id="call_456",
+            function={"name": "calculate", "arguments": '{"x": 5, "y": 10}'},
         )
 
         assert tool_call.id == "call_456"
@@ -277,7 +282,9 @@ class TestToolCall:
 
     def test_tool_call_empty_arguments(self):
         """Test tool call with empty arguments."""
-        tool_call = ToolCall(id="call_789", name="no_args_func", arguments={})
+        tool_call = ToolCall(
+            id="call_789", function={"name": "no_args_func", "arguments": {}}
+        )
 
         assert tool_call.id == "call_789"
         assert tool_call.name == "no_args_func"

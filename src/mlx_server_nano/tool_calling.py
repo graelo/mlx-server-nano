@@ -57,6 +57,9 @@ class DevstralToolCallParser(ToolCallParser):
 
     def format_tools_for_prompt(self, tools: list[Tool]) -> str:
         """Format tools for Devstral's [AVAILABLE_TOOLS] format."""
+        if not tools:
+            return ""
+
         tool_specs = []
         for tool in tools:
             tool_spec = {
@@ -107,6 +110,9 @@ class Qwen3ToolCallParser(ToolCallParser):
 
     def format_tools_for_prompt(self, tools: list[Tool]) -> str:
         """Format tools for Qwen3's system prompt format."""
+        if not tools:
+            return ""
+
         tool_descriptions = []
         for tool in tools:
             desc = f"### {tool.function.name}\n\n"
@@ -158,9 +164,11 @@ class Qwen3ToolCallParser(ToolCallParser):
 
         # Remove tool call markers from content
         if tool_calls:
-            content = re.sub(r"✿FUNCTION✿:[^\n]*\n", "", content)
-            content = re.sub(r"✿ARGS✿:[^✿]*", "", content)
-            content = content.replace("✿RESULT✿:", "").replace("✿RETURN✿:", "").strip()
+            content = re.sub(r"✿FUNCTION✿:[^\n]*\n?", "", content)
+            content = re.sub(r"✿ARGS✿:\s*\{[^}]*\}\s*\n?", "", content)
+            content = re.sub(r"✿RESULT✿:[^\n]*\n?", "", content)
+            content = re.sub(r"✿RETURN✿:[^\n]*\n?", "", content)
+            content = content.strip()
 
         return content if content else None, tool_calls
 
@@ -185,6 +193,6 @@ def get_tool_parser(model_name: str) -> ToolCallParser:
         logger.debug("Using Qwen3ToolCallParser")
         return Qwen3ToolCallParser()
     else:
-        logger.debug("Using default Qwen3ToolCallParser for unknown model")
-        # Default to Qwen3 format for unknown models
-        return Qwen3ToolCallParser()
+        logger.debug("Using default DevstralToolCallParser for unknown model")
+        # Default to Devstral format for unknown models
+        return DevstralToolCallParser()

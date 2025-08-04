@@ -34,7 +34,7 @@ class TestToolCallParser:
 class TestDevstralToolCallParser:
     """Test cases for Devstral-specific tool call parsing."""
 
-    def setUp(self):
+    def setup_method(self):
         """Set up test fixtures."""
         self.parser = DevstralToolCallParser()
         self.sample_tool = Tool(
@@ -64,7 +64,7 @@ class TestDevstralToolCallParser:
 
         result = parser.format_tools_for_prompt(tools)
 
-        assert "## Available Functions" in result
+        # Devstral format is JSON, not markdown headers
         assert "get_weather" in result
         assert "Get current weather for a location" in result
         assert "location" in result
@@ -90,7 +90,8 @@ class TestDevstralToolCallParser:
 
         assert "get_weather" in result
         assert "calculate" in result
-        assert result.count("### ") == 2  # Two function headers
+        # DevStral format is JSON array, not markdown with headers
+        assert '"name"' in result  # Check for JSON structure
 
     def test_parse_tool_calls_no_tools(self):
         """Test parsing response with no tool calls."""
@@ -297,9 +298,7 @@ class TestToolCallIntegration:
         # Simulate model response
         model_response = """I'll check the weather for you.
 
-✿FUNCTION✿
-{"name": "get_weather", "arguments": {"location": "Boston"}}
-✿FUNCTION✿
+[TOOL_CALLS][{"name": "get_weather", "arguments": {"location": "Boston"}}]
 
 Weather function called successfully."""
 
@@ -308,7 +307,12 @@ Weather function called successfully."""
 
         assert len(tool_calls) == 1
         assert tool_calls[0].name == "get_weather"
-        assert tool_calls[0].arguments["location"] == "Boston"
+
+        # Arguments are stored as JSON string, so parse them
+        import json
+
+        args = json.loads(tool_calls[0].arguments)
+        assert args["location"] == "Boston"
         assert "Weather function called successfully." in content
 
     def test_qwen_end_to_end(self):

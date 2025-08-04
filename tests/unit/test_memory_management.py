@@ -207,7 +207,7 @@ class TestMemoryCleanupVerification:
         model_manager._model_name = "test-model"
 
         # Configure gc mock to return different values for multiple calls
-        mock_gc.side_effect = [10, 5, 0]  # Decreasing collected objects
+        mock_gc.return_value = 10  # Just return a fixed value
 
         # Unload model
         _unload_model()
@@ -215,7 +215,7 @@ class TestMemoryCleanupVerification:
         # Verify cleanup was called
         mock_clear_cache.assert_called_once()
 
-        # Verify multiple GC rounds
+        # Verify GC was called
         assert mock_gc.call_count >= 1
 
     @patch("mlx.core.clear_cache")

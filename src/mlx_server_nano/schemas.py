@@ -12,7 +12,7 @@ Models:
 - ChatCompletionResponse: Response schema for chat completions
 """
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from typing import Any, Dict, List, Optional, Union
 
 
@@ -52,11 +52,19 @@ class ChatCompletionRequest(BaseModel):
 
     model: str
     messages: List[Message]
-    max_tokens: Optional[int] = 512
-    temperature: Optional[float] = 0.7
+    max_tokens: Optional[int] = None
+    temperature: Optional[float] = None
+    top_p: Optional[float] = None
     stream: Optional[bool] = False
     tools: Optional[List[Tool]] = None
     tool_choice: Optional[Union[str, ToolChoice]] = "auto"
+
+    @field_validator("messages")
+    @classmethod
+    def validate_messages_not_empty(cls, v):
+        if not v:
+            raise ValueError("messages cannot be empty")
+        return v
 
 
 class ToolCall(BaseModel):
@@ -65,6 +73,16 @@ class ToolCall(BaseModel):
     id: str
     type: str = "function"
     function: Dict[str, Any]
+
+    @property
+    def name(self) -> str:
+        """Get the function name for backward compatibility."""
+        return self.function.get("name", "")
+
+    @property
+    def arguments(self) -> Union[str, Dict[str, Any]]:
+        """Get the function arguments for backward compatibility."""
+        return self.function.get("arguments", {})
 
 
 class ChatCompletionResponse(BaseModel):
