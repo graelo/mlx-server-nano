@@ -3,7 +3,7 @@ import sys
 from .config import config
 
 
-def setup_logging():
+def setup_logging() -> None:
     """Setup logging configuration"""
     log_level = getattr(logging, config.log_level, logging.INFO)
 

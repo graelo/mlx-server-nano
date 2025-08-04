@@ -25,7 +25,11 @@ from mlx_server_nano.model_manager import (
 class TestModelUnloaderIntegration:
     """Integration tests for the model unloader background task."""
 
-    async def test_model_unloader_lifecycle(self, clean_model_manager, test_env_vars):
+    async def test_model_unloader_lifecycle(
+        self,
+        clean_model_manager: pytest.Fixture,
+        test_env_vars: dict[str, int | str | float | bool],
+    ) -> None:
         """Test complete model unloader lifecycle."""
         # Ensure clean state
         await stop_model_unloader()
@@ -49,8 +53,11 @@ class TestModelUnloaderIntegration:
 
     @patch("mlx_server_nano.model_manager.load")
     async def test_model_loading_with_unloader(
-        self, mock_load, clean_model_manager, test_env_vars
-    ):
+        self,
+        mock_load: MagicMock,
+        clean_model_manager: pytest.Fixture,
+        test_env_vars: dict[str, int | str | float | bool],
+    ) -> None:
         """Test model loading integration with unloader."""
         # Configure mock
         mock_model = MagicMock()

@@ -46,12 +46,12 @@ _unload_requested = asyncio.Event()
 _shutdown_requested = asyncio.Event()
 
 
-def get_current_time():
+def get_current_time() -> float:
     """Get current timestamp. Separate function for easier testing."""
     return time.time()
 
 
-def _unload_model():
+def _unload_model() -> None:
     """Internal function to unload the current model and reset state."""
     global _loaded_model, _model_name
     logger.info(f"Unloading model '{_model_name}' due to inactivity")
@@ -59,7 +59,7 @@ def _unload_model():
     _model_name = None
 
 
-async def _model_unloader_background_task():
+async def _model_unloader_background_task() -> None:
     """Background task that handles model unloading based on idle timeout."""
     logger.info("Model unloader background task started")
 

@@ -19,6 +19,7 @@ import os
 import time
 import uuid
 from contextlib import asynccontextmanager
+from typing import AsyncGenerator, Generator, Callable
 
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import StreamingResponse
@@ -30,14 +31,14 @@ from .model_manager import (
     start_model_unloader,
     stop_model_unloader,
 )
-from .schemas import ChatCompletionRequest
+from .schemas import ChatCompletionRequest, Message, Tool
 
 # Set up logging
 logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Manage application lifespan for background tasks."""
     # Startup
     logger.info("Starting MLX Server Nano")
@@ -57,8 +58,12 @@ app = FastAPI(
 
 
 def create_streaming_response(
-    model_name: str, messages, tools, max_tokens, temperature
-):
+    model_name: str,
+    messages: list[Message],
+    tools: list[Tool] | None,
+    max_tokens: int | None,
+    temperature: float | None,
+) -> Callable[[], Generator[str, None, None]]:
     """
     Create a streaming response generator for chat completions.
 
@@ -73,7 +78,7 @@ def create_streaming_response(
         Generator function that yields SSE-formatted streaming chunks
     """
 
-    def generate():
+    def generate() -> Generator[str, None, None]:
         """Generator function that streams chat completion chunks in OpenAI format."""
         logger.debug("Starting streaming generation")
 
@@ -152,7 +157,7 @@ def create_streaming_response(
     return generate
 
 
-def _create_streaming_headers():
+def _create_streaming_headers() -> dict[str, str]:
     """Create common headers for streaming responses."""
     return {
         "Cache-Control": "no-cache",
@@ -176,7 +181,9 @@ def _create_chat_response_message(content: str, tool_calls: list) -> dict:
 
 
 def _create_chat_completion_response(
-    model: str, message: dict, tool_calls: list
+    model: str,
+    message: dict,
+    tool_calls: list,
 ) -> dict:
     """Create a properly formatted chat completion response."""
     return {
@@ -200,7 +207,7 @@ def _create_chat_completion_response(
 
 
 @app.post("/v1/chat/completions")
-def chat_completion(body: ChatCompletionRequest):
+def chat_completion(body: ChatCompletionRequest) -> object:
     """
     Handle chat completion requests with support for both streaming and non-streaming modes.
 
@@ -271,7 +278,7 @@ def chat_completion(body: ChatCompletionRequest):
 
 
 @app.get("/v1/models")
-def list_models():
+def list_models() -> dict[str, object]:
     """
     List available models.
 
@@ -300,7 +307,7 @@ def list_models():
 
 
 @app.get("/health")
-def health_check():
+def health_check() -> dict[str, str]:
     return {"status": "healthy"}
 
 
@@ -310,7 +317,7 @@ if __name__ == "__main__":
     uvicorn.run(app, host=config.host, port=config.port)
 
 
-def main():
+def main() -> None:
     """Entry point for the mlx-server-nano command"""
     import uvicorn
 

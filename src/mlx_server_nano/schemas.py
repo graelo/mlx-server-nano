@@ -61,7 +61,7 @@ class ChatCompletionRequest(BaseModel):
 
     @field_validator("messages")
     @classmethod
-    def validate_messages_not_empty(cls, v):
+    def validate_messages_not_empty(cls, v: list[Message]) -> list[Message]:
         if not v:
             raise ValueError("messages cannot be empty")
         return v
