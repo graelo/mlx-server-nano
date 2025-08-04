@@ -86,23 +86,48 @@ class TestModelUnloaderIntegration:
         mock_tokenizer = MagicMock()
         mock_load.return_value = (mock_model, mock_tokenizer)
 
-        # Start unloader with short timeout (from test_env_vars)
-        await start_model_unloader()
+        # Create a completion event for synchronization
+        unload_completed = asyncio.Event()
 
-        try:
-            # Load model
-            load_model("test-model")
-            assert model_manager._loaded_model is not None
+        # Patch _unload_model to signal completion
+        original_unload = model_manager._unload_model
 
-            # Wait for timeout + margin (test timeout is 2 seconds)
-            await asyncio.sleep(3)
+        def synchronized_unload():
+            result = original_unload()
+            unload_completed.set()
+            return result
 
-            # Model should be unloaded
-            assert model_manager._loaded_model is None
-            assert model_manager._model_name is None
+        # Use test timeout value
+        test_timeout = 2  # From test_env_vars
 
-        finally:
-            await stop_model_unloader()
+        with (
+            patch.object(model_manager, "_unload_model", synchronized_unload),
+            patch.object(model_manager, "MODEL_IDLE_TIMEOUT", test_timeout),
+        ):
+            # Start unloader with short timeout
+            await start_model_unloader()
+
+            try:
+                # Load model
+                load_model("test-model")
+                assert model_manager._loaded_model is not None
+
+                # Simulate that the model was loaded long ago by setting an old timestamp
+                # This ensures the unload condition will be met after the timeout
+                old_time = model_manager.get_current_time() - (test_timeout + 1)
+                model_manager._last_used_time = old_time
+
+                # Wait for actual unload completion (with timeout)
+                await asyncio.wait_for(
+                    unload_completed.wait(), timeout=test_timeout + 2.0
+                )
+
+                # Now assert the model is unloaded
+                assert model_manager._loaded_model is None
+                assert model_manager._model_name is None
+
+            finally:
+                await stop_model_unloader()
 
     @patch("mlx_server_nano.model_manager.load")
     async def test_model_cache_reuse_resets_timer(

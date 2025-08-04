@@ -80,23 +80,50 @@ def client():
 
 @pytest.fixture
 async def clean_model_manager():
-    """Clean model manager state before and after tests."""
+    """Clean model manager state before and after tests with proper async cleanup."""
     # Save original state
     original_model = model_manager._loaded_model
     original_name = model_manager._model_name
     original_last_used = model_manager._last_used_time
+    original_events = (
+        model_manager._unload_requested,
+        model_manager._shutdown_requested,
+    )
+    original_task = model_manager._model_unloader_task
 
-    # Clean state for test
+    # Create fresh events for this test
+    model_manager._unload_requested = asyncio.Event()
+    model_manager._shutdown_requested = asyncio.Event()
+    model_manager._model_unloader_task = None
+
+    # Clean model state
     model_manager._loaded_model = None
     model_manager._model_name = None
     model_manager._last_used_time = 0
 
     yield
 
+    # Cleanup and restore
+    if (
+        model_manager._model_unloader_task
+        and not model_manager._model_unloader_task.done()
+    ):
+        model_manager._shutdown_requested.set()
+        try:
+            await asyncio.wait_for(model_manager._model_unloader_task, timeout=1.0)
+        except asyncio.TimeoutError:
+            model_manager._model_unloader_task.cancel()
+            try:
+                await model_manager._model_unloader_task
+            except asyncio.CancelledError:
+                pass
+
     # Restore original state (best effort)
     model_manager._loaded_model = original_model
     model_manager._model_name = original_name
     model_manager._last_used_time = original_last_used
+    model_manager._unload_requested, model_manager._shutdown_requested = original_events
+    model_manager._model_unloader_task = original_task
 
 
 @pytest.fixture
