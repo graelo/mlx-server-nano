@@ -24,23 +24,20 @@ jobs:
 
       - name: Install dependencies
         run: |
-          python -m pip install --upgrade pip
-          pip install -e .[dev]
+          pip install uv
+          uv sync --group dev --group test
 
       - name: Lint with ruff
         run: |
-          pip install ruff
-          ruff check src/ tests/
+          uv run ruff check src/ tests/
 
       - name: Type check with pyright
         run: |
-          npm install -g pyright
-          pyright src/ tests/
+          uv run pyright src/ tests/
 
       - name: Run tests with pytest
         run: |
-          pip install pytest
-          pytest --maxfail=2 --disable-warnings --tb=short
+          uv run pytest --maxfail=2 --disable-warnings --tb=short
 
       - name: Upload coverage report
         if: success()
