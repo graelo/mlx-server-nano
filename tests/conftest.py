@@ -12,8 +12,7 @@ from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
 
-# Import the application and modules to test
-from mlx_server_nano.main import app
+from mlx_server_nano.app import app
 from mlx_server_nano.config import ServerConfig
 from mlx_server_nano import model_manager
 

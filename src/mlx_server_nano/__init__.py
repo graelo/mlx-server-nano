@@ -25,8 +25,7 @@ __version__ = "0.2.0"
 __author__ = "bosr"
 __description__ = "OpenAI-compatible API server for Apple Silicon using MLX"
 
-# Import main components for easy access
-from .main import app
+from .app import app
 from .config import config
 from .schemas import ChatCompletionRequest, ChatCompletionResponse
 

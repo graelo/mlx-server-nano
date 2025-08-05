@@ -85,7 +85,7 @@ class TestBasicIntegration:
         import mlx_server_nano.tool_calling
 
         # Just test they can be imported without errors
-        assert hasattr(mlx_server_nano.main, "app")
+        assert hasattr(mlx_server_nano, "app")
         assert ServerConfig is not None
         assert Message is not None
 
