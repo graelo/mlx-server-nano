@@ -71,14 +71,19 @@ class DevstralToolCallParser(ToolCallParser):
         return json.dumps(tool_specs, indent=2)
 
     def parse_tool_calls(self, response: str) -> tuple[Optional[str], list[ToolCall]]:
-        """Parse Devstral's [TOOL_CALLS][...] format."""
+        """Parse Devstral's tool call formats: [TOOL_CALLS][...] or [B_INST]...tool call...[/B_INST]."""
         tool_calls = []
         content = response
 
-        # Look for [TOOL_CALLS][...] pattern
+        # Look for [TOOL_CALLS][...] pattern (original format)
         tool_call_pattern = r"\[TOOL_CALLS\]\[(.*?)\]"
         matches = re.findall(tool_call_pattern, response, re.DOTALL)
 
+        # Also look for [B_INST]...tool call...[/B_INST] pattern (newer format)
+        b_inst_pattern = r"\[B_INST\](.*?)\[/B_INST\]"
+        b_inst_matches = re.findall(b_inst_pattern, response, re.DOTALL)
+
+        # Process [TOOL_CALLS] format matches
         for match in matches:
             try:
                 # Parse the JSON array of tool calls
@@ -100,6 +105,29 @@ class DevstralToolCallParser(ToolCallParser):
 
             except (json.JSONDecodeError, KeyError) as e:
                 logger.error(f"Failed to parse tool call: {e}")
+                continue
+
+        # Process [B_INST] format matches
+        for match in b_inst_matches:
+            try:
+                # Parse the JSON tool call directly
+                call_data = json.loads(match.strip())
+                tool_call = ToolCall(
+                    id=f"call_{uuid.uuid4().hex[:8]}",
+                    function={
+                        "name": call_data["name"],
+                        "arguments": json.dumps(call_data["arguments"]),
+                    },
+                )
+                tool_calls.append(tool_call)
+
+                # Remove tool calls from content
+                content = re.sub(
+                    r"\[B_INST\].*?\[/B_INST\]", "", content, flags=re.DOTALL
+                ).strip()
+
+            except (json.JSONDecodeError, KeyError) as e:
+                logger.error(f"Failed to parse B_INST tool call: {e}")
                 continue
 
         return content if content else None, tool_calls

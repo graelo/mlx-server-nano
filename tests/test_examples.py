@@ -308,20 +308,28 @@ def test_example_using_custom_fixture(example_complex_tool):
     "model_name,expected_stop_strings",
     [
         ("qwen-chat", True),
-        ("devstral-model", False),
+        ("devstral-model", True),  # Now has default stop strings
         ("gpt-4", False),
     ],
 )
 def test_example_parametrized(model_name, expected_stop_strings):
     """Example: Parametrized test for different model configurations."""
-    from mlx_server_nano.model_manager import _setup_generation_kwargs
+    from mlx_server_nano.model_manager import (
+        _setup_generation_kwargs,
+        _get_stop_sequences,
+    )
 
     kwargs = _setup_generation_kwargs(model_name)
+    stop_sequences = _get_stop_sequences(model_name)
 
+    # generation_kwargs no longer contains stop_strings
+    assert "stop_strings" not in kwargs
+
+    # Check stop sequences separately
     if expected_stop_strings:
-        assert "stop_strings" in kwargs
+        assert len(stop_sequences) > 0
     else:
-        assert "stop_strings" not in kwargs
+        assert len(stop_sequences) == 0
 
 
 # Example test class with setup/teardown

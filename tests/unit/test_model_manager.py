@@ -19,6 +19,7 @@ from mlx_server_nano.model_manager import (
     generate_response_with_tools,
     generate_response_stream,
     _setup_generation_kwargs,
+    _get_stop_sequences,
     _try_generate_with_fallback,
 )
 
@@ -237,11 +238,16 @@ class TestSetupGenerationKwargs:
     def test_setup_generation_kwargs_qwen_stop_strings(self):
         """Test that Qwen models get special stop strings."""
         kwargs = _setup_generation_kwargs("qwen-model")
+        stop_sequences = _get_stop_sequences("qwen-model")
 
-        assert "stop_strings" in kwargs
-        assert "✿RESULT✿:" in kwargs["stop_strings"]
-        assert "✿RETURN✿:" in kwargs["stop_strings"]
-        assert "<|im_end|>" in kwargs["stop_strings"]
+        # generation_kwargs no longer contains stop_strings
+        assert "stop_strings" not in kwargs
+
+        # But stop sequences are properly configured
+        assert len(stop_sequences) > 0
+        assert "✿RESULT✿:" in stop_sequences
+        assert "✿RETURN✿:" in stop_sequences
+        assert "<|im_end|>" in stop_sequences
 
     def test_setup_generation_kwargs_non_qwen_no_stop_strings(self):
         """Test that non-Qwen models don't get stop strings."""
@@ -415,8 +421,9 @@ class TestGenerateResponseIntegration:
         # Call function and collect results
         chunks = list(generate_response_stream("test-model", []))
 
-        # Verify result
-        assert chunks == ["Hello", " world"]
+        # Verify result - expecting tuples with finish_reason
+        expected_chunks = [("Hello", None), (" world", None), ("", "stop")]
+        assert chunks == expected_chunks
 
         # Verify calls
         mock_load_model.assert_called_once()

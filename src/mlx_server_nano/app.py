@@ -46,6 +46,7 @@ def create_streaming_response(
     tools: list[Tool] | None,
     max_tokens: int | None,
     temperature: float | None,
+    stop: str | list[str] | None,
 ) -> Callable[[], Generator[str, None, None]]:
     def generate() -> Generator[str, None, None]:
         logger.debug("Starting streaming generation")
@@ -58,34 +59,62 @@ def create_streaming_response(
                 tools=tools,
                 max_tokens=max_tokens,
                 temperature=temperature,
+                stop=stop,
             )
             chunk_count = 0
-            for chunk in stream_generator:
-                chunk_count += 1
-                logger.debug(f"Yielding chunk {chunk_count}: {chunk}")
-                chunk_data = {
-                    "id": completion_id,
-                    "object": "chat.completion.chunk",
-                    "created": created_time,
-                    "model": model_name,
-                    "choices": [
-                        {"index": 0, "delta": {"content": chunk}, "finish_reason": None}
-                    ],
-                }
-                yield f"data: {json.dumps(chunk_data)}\n\n"
+            final_finish_reason = "stop"  # Default finish reason
+
+            for chunk_data in stream_generator:
+                # Handle new tuple format: (text_chunk, finish_reason)
+                if isinstance(chunk_data, tuple):
+                    chunk_text, finish_reason = chunk_data
+                    if finish_reason is not None:
+                        # This is the final chunk indicator
+                        final_finish_reason = finish_reason
+                        break
+                else:
+                    # Backward compatibility: treat as text chunk
+                    chunk_text = chunk_data
+
+                if chunk_text:  # Only yield non-empty chunks
+                    chunk_count += 1
+                    logger.debug(f"Yielding chunk {chunk_count}: {chunk_text}")
+                    chunk_data = {
+                        "id": completion_id,
+                        "object": "chat.completion.chunk",
+                        "created": created_time,
+                        "model": model_name,
+                        "system_fingerprint": None,
+                        "choices": [
+                            {
+                                "index": 0,
+                                "delta": {"content": chunk_text},
+                                "logprobs": None,
+                                "finish_reason": None,
+                            }
+                        ],
+                    }
+                    yield f"data: {json.dumps(chunk_data)}\n\n"
+
+            # Send final chunk with the determined finish reason
             final_chunk = {
                 "id": completion_id,
                 "object": "chat.completion.chunk",
                 "created": created_time,
                 "model": model_name,
+                "system_fingerprint": None,
                 "choices": [
                     {
                         "index": 0,
                         "delta": {},
-                        "finish_reason": "stop",
+                        "logprobs": None,
+                        "finish_reason": final_finish_reason,
                     }
                 ],
             }
+            logger.info(
+                f"Streaming completed with finish_reason: {final_finish_reason}"
+            )
             yield f"data: {json.dumps(final_chunk)}\n\n"
             yield "data: [DONE]\n\n"
         except Exception as e:
@@ -95,7 +124,15 @@ def create_streaming_response(
                 "object": "chat.completion.chunk",
                 "created": int(time.time()),
                 "model": model_name,
-                "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                "system_fingerprint": None,
+                "choices": [
+                    {
+                        "index": 0,
+                        "delta": {},
+                        "logprobs": None,
+                        "finish_reason": "stop",
+                    }
+                ],
                 "error": {"message": str(e), "type": "internal_error"},
             }
             yield f"data: {json.dumps(error_chunk)}\n\n"
@@ -143,6 +180,7 @@ def _create_chat_completion_response(
                 "index": 0,
                 "message": message,
                 "finish_reason": "tool_calls" if tool_calls else "stop",
+                "logprobs": None,  # OpenAI compatibility
             }
         ],
         "usage": {
@@ -150,6 +188,7 @@ def _create_chat_completion_response(
             "completion_tokens": 0,
             "total_tokens": 0,
         },
+        "system_fingerprint": None,  # OpenAI compatibility
     }
 
 
@@ -158,6 +197,11 @@ def chat_completion(body: ChatCompletionRequest) -> object:
     logger.info(
         f"Chat completion request - model: {body.model}, messages: {len(body.messages)}, stream: {body.stream}"
     )
+
+    # Log the stop parameter if provided
+    if body.stop is not None:
+        logger.info(f"Stop words received: {body.stop}")
+
     logger.debug(f"Request body: {body}")
     if body.stream:
         logger.info("Processing streaming request")
@@ -167,6 +211,7 @@ def chat_completion(body: ChatCompletionRequest) -> object:
             tools=body.tools,
             max_tokens=body.max_tokens,
             temperature=body.temperature,
+            stop=body.stop,
         )
         logger.info("Created streaming generator, returning StreamingResponse")
         return StreamingResponse(
@@ -182,6 +227,7 @@ def chat_completion(body: ChatCompletionRequest) -> object:
             tools=body.tools,
             max_tokens=body.max_tokens,
             temperature=body.temperature,
+            stop=body.stop,
         )
         logger.info(
             f"Response generated - content: {len(content) if content else 0} chars, tool_calls: {len(tool_calls)}"

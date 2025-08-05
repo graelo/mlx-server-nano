@@ -18,7 +18,7 @@ import gc
 import logging
 import threading
 import time
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 import mlx.core as mx
 from mlx_lm.generate import generate, stream_generate
@@ -271,12 +271,106 @@ def _setup_generation_kwargs(model_name: str, **kwargs) -> dict:
         "max_tokens": kwargs.get("max_tokens", config.default_max_tokens),
     }
 
-    # Add model-specific stop strings
-    if "qwen" in model_name.lower():
-        generation_kwargs["stop_strings"] = ["✿RESULT✿:", "✿RETURN✿:", "<|im_end|>"]
-        logger.debug("Added Qwen stop strings")
+    # Handle temperature parameter
+    temperature = kwargs.get("temperature")
+    if temperature is not None:
+        generation_kwargs["temp"] = temperature
+        logger.debug(f"Using temperature: {temperature}")
+
+    # Note: stop_strings handling moved to manual detection in generation functions
+    # since some MLX versions don't support stop_strings parameter
 
     return generation_kwargs
+
+
+def _get_stop_sequences(
+    model_name: str, stop_param: Optional[Union[str, List[str]]] = None
+) -> List[str]:
+    """
+    Get stop sequences from request parameter or model-specific defaults.
+
+    Args:
+        model_name: Name of the model
+        stop_param: Stop parameter from request
+
+    Returns:
+        List of stop sequences
+    """
+    stop_sequences = []
+
+    if stop_param is not None:
+        if isinstance(stop_param, str):
+            stop_sequences = [stop_param]
+            logger.info(f"Using stop string from request: [{stop_param}]")
+        elif isinstance(stop_param, list):
+            stop_sequences = stop_param
+            logger.info(f"Using stop strings from request: {stop_param}")
+    else:
+        # Add model-specific stop strings only if no stop parameter provided
+        if "qwen" in model_name.lower():
+            stop_sequences = ["✿RESULT✿:", "✿RETURN✿:", "<|im_end|>"]
+            logger.debug("Added Qwen stop strings")
+        elif "devstral" in model_name.lower() or "mistral" in model_name.lower():
+            stop_sequences = ["[/B_INST]", "[/TOOL_CALLS]"]
+            logger.debug("Added Devstral/Mistral stop strings")
+
+    return stop_sequences
+
+
+def _contains_tool_calls(
+    response: str, model_name: str, tools: Optional[List[Tool]] = None
+) -> bool:
+    """
+    Check if the response contains tool calls by parsing it.
+
+    Args:
+        response: The generated response text
+        model_name: Name of the model for parser selection
+        tools: Available tools
+
+    Returns:
+        True if response contains tool calls, False otherwise
+    """
+    if not tools:
+        logger.debug("No tools provided, cannot detect tool calls")
+        return False
+
+    try:
+        from .tool_calling import get_tool_parser
+
+        parser = get_tool_parser(model_name)
+        content, tool_calls = parser.parse_tool_calls(response)
+
+        logger.debug(
+            f"Tool call detection - Model: {model_name}, Parser: {type(parser).__name__}"
+        )
+        logger.debug(f"Tool call detection - Response length: {len(response)}")
+        logger.debug(f"Tool call detection - Found {len(tool_calls)} tool calls")
+
+        if tool_calls:
+            logger.debug(f"Tool call detection - Tool calls found: {tool_calls}")
+
+        return len(tool_calls) > 0
+    except Exception as e:
+        logger.debug(f"Error checking for tool calls: {e}")
+        return False
+
+
+def _check_stop_sequences(text: str, stop_sequences: List[str]) -> Optional[str]:
+    """
+    Check if any stop sequence appears in the text.
+
+    Args:
+        text: Text to check
+        stop_sequences: List of stop sequences to look for
+
+    Returns:
+        The stop sequence that was found, or None if none found
+    """
+    for stop_seq in stop_sequences:
+        if stop_seq in text:
+            return stop_seq
+    return None
 
 
 def _try_generate_with_fallback(
@@ -314,7 +408,11 @@ def _try_generate_with_fallback(
 
 
 def generate_response_with_tools(
-    model_name: str, messages: List, tools: Optional[List[Tool]] = None, **kwargs
+    model_name: str,
+    messages: List,
+    tools: Optional[List[Tool]] = None,
+    stop: Optional[Union[str, List[str]]] = None,
+    **kwargs,
 ) -> Tuple[Optional[str], List[ToolCall]]:
     """
     Generate response with tool calling support.
@@ -354,9 +452,11 @@ def generate_response_with_tools(
         logger.error(f"Failed to format messages: {e}", exc_info=True)
         raise
 
-    # Setup generation parameters
+    # Setup generation parameters (without stop_strings)
     generation_kwargs = _setup_generation_kwargs(model_name, **kwargs)
     logger.info(f"Generation parameters: {generation_kwargs}")
+
+    # Note: Stop sequences will be handled after generation for non-streaming
 
     # Generate text response
     try:
@@ -390,7 +490,11 @@ def generate_response_with_tools(
 
 
 def generate_response_stream(
-    model_name: str, messages: list, tools: Optional[List[Tool]] = None, **kwargs
+    model_name: str,
+    messages: list,
+    tools: Optional[List[Tool]] = None,
+    stop: Optional[Union[str, List[str]]] = None,
+    **kwargs,
 ):
     """
     Generate streaming response with tool calling support.
@@ -399,10 +503,12 @@ def generate_response_stream(
         model_name: Name of the model to use
         messages: List of conversation messages
         tools: Optional list of available tools
+        stop: Stop words/sequences to terminate generation
         **kwargs: Additional generation parameters
 
     Yields:
-        Individual text chunks as they are generated
+        Tuple of (text_chunk, finish_reason) where finish_reason is None for intermediate chunks
+        and a string ("stop", "tool_calls", "length") for the final chunk
 
     Note:
         Tool calls are processed after full response completion in streaming mode.
@@ -427,25 +533,92 @@ def generate_response_stream(
         logger.error(f"Failed to format messages: {e}", exc_info=True)
         raise
 
-    # Setup generation parameters
+    # Setup generation parameters (without stop_strings)
     generation_kwargs = _setup_generation_kwargs(model_name, **kwargs)
     logger.info(f"Streaming generation parameters: {generation_kwargs}")
+
+    # Get stop sequences for manual detection
+    stop_sequences = _get_stop_sequences(model_name, stop)
 
     try:
         logger.debug("Starting streaming text generation with stream_generate")
 
         # Use stream_generate to yield chunks as they come
         full_response = ""
+        last_chunk = None
         for chunk in stream_generate(model, tokenizer, prompt, **generation_kwargs):
             # Extract text from GenerationResponse object
             chunk_text = chunk.text if hasattr(chunk, "text") else str(chunk)
             full_response += chunk_text
-            yield chunk_text
+            last_chunk = chunk
+
+            # Check for stop sequences after each chunk
+            if stop_sequences:
+                found_stop = _check_stop_sequences(full_response, stop_sequences)
+                if found_stop:
+                    # Stop sequence found - determine finish reason
+                    logger.debug(f"Stop sequence '{found_stop}' found in response")
+                    logger.debug(f"Full response so far: {repr(full_response)}")
+
+                    # First check if the response contains actual tool calls
+                    if _contains_tool_calls(full_response, model_name, tools):
+                        finish_reason = "tool_calls"
+                        logger.info(
+                            f"Generation stopped due to tool calls detected in response (stop sequence: {found_stop})"
+                        )
+                    # Then check if stop sequence itself is tool-related
+                    elif any(
+                        tool_indicator in found_stop.lower()
+                        for tool_indicator in [
+                            "tool",
+                            "function",
+                            "[/tool",
+                            "tool_call",
+                            "b_inst",
+                        ]
+                    ):
+                        finish_reason = "tool_calls"
+                        logger.info(
+                            f"Generation stopped due to tool-related stop sequence: {found_stop}"
+                        )
+                    else:
+                        finish_reason = "stop"
+                        logger.info(
+                            f"Generation stopped due to stop sequence: {found_stop}"
+                        )
+
+                    # Yield the chunk before the stop sequence
+                    if chunk_text:
+                        yield chunk_text, None
+
+                    # Yield final indication with finish reason
+                    yield "", finish_reason
+                    return
+
+            yield chunk_text, None  # None indicates this is not the final chunk
+
+        # Determine finish reason based on the final state
+        finish_reason = "stop"  # Default finish reason
+
+        # Check if we have information from the MLX response about why it stopped
+        if last_chunk and hasattr(last_chunk, "finish_reason"):
+            if last_chunk.finish_reason == "length":
+                finish_reason = "length"
+
+        # Check if the final response contains tool calls (even if no stop sequence was hit)
+        if _contains_tool_calls(full_response, model_name, tools):
+            finish_reason = "tool_calls"
+            logger.info(
+                "Final response contains tool calls, setting finish_reason to tool_calls"
+            )
 
         logger.info(
-            f"Streaming generation completed - total length: {len(full_response)} characters"
+            f"Streaming generation completed - total length: {len(full_response)} characters, finish_reason: {finish_reason}"
         )
         logger.debug(f"Full streamed response: {full_response}")
+
+        # Yield final indication with finish reason
+        yield "", finish_reason
 
     except Exception as e:
         logger.error(f"Streaming text generation failed: {e}", exc_info=True)

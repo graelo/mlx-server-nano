@@ -58,14 +58,31 @@ class ChatCompletionRequest(BaseModel):
     temperature: Optional[float] = None
     top_p: Optional[float] = None
     stream: Optional[bool] = False
+    stop: Optional[Union[str, List[str]]] = None
     tools: Optional[List[Tool]] = None  # Always check for None before using
     tool_choice: Optional[Union[str, ToolChoice]] = "auto"
+    # Additional OpenAI-compatible parameters
+    frequency_penalty: Optional[float] = None
+    presence_penalty: Optional[float] = None
+    logit_bias: Optional[Dict[str, float]] = None
+    user: Optional[str] = None
+    seed: Optional[int] = None
 
     @field_validator("messages")
     @classmethod
     def validate_messages_not_empty(cls, v: list[Message]) -> list[Message]:
         if not v:
             raise ValueError("messages cannot be empty")
+        return v
+
+    @field_validator("stop")
+    @classmethod
+    def validate_stop_sequences(
+        cls, v: Optional[Union[str, List[str]]]
+    ) -> Optional[Union[str, List[str]]]:
+        if v is not None:
+            if isinstance(v, list) and len(v) > 4:
+                raise ValueError("stop can contain at most 4 sequences")
         return v
 
 

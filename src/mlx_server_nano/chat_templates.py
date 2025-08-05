@@ -81,6 +81,9 @@ def format_devstral_messages(
         if msg.role == "user":
             last_user_idx = i
 
+    # Check if the last message is from user (expecting assistant response)
+    expecting_response = len(messages) > 0 and messages[-1].role == "user"
+
     for i, message in enumerate(messages):
         if message.role == "system":
             prompt += f"[SYSTEM_PROMPT]{message.content}[/SYSTEM_PROMPT]\n"
@@ -94,7 +97,13 @@ def format_devstral_messages(
                 tools_str = parser.format_tools_for_prompt(tools)
                 prompt += f"[AVAILABLE_TOOLS]{tools_str}[/AVAILABLE_TOOLS]\n"
 
-            prompt += f"[INST]{message.content}[/INST]\n"
+            # For final user message expecting response, leave open for model to close
+            if i == len(messages) - 1 and expecting_response:
+                prompt += (
+                    f"[INST]{message.content}"  # No [/INST] - let model generate it
+                )
+            else:
+                prompt += f"[INST]{message.content}[/INST]\n"
 
         elif message.role == "assistant":
             if message.content:

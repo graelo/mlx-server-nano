@@ -244,8 +244,9 @@ class TestModelGenerationIntegration:
             )
         )
 
-        # Verify result
-        assert chunks == ["Hello", " world"]
+        # Verify result - expecting tuples with finish_reason
+        expected_chunks = [("Hello", None), (" world", None), ("", "stop")]
+        assert chunks == expected_chunks
 
         # Verify model state
         assert model_manager._loaded_model == (mock_model, mock_tokenizer)
@@ -435,16 +436,26 @@ class TestModelConfigurationIntegration:
         mock_load.return_value = (mock_model, mock_tokenizer)
 
         # Test Qwen model configuration
-        from mlx_server_nano.model_manager import _setup_generation_kwargs
+        from mlx_server_nano.model_manager import (
+            _setup_generation_kwargs,
+            _get_stop_sequences,
+        )
 
         qwen_kwargs = _setup_generation_kwargs("qwen-test-model", max_tokens=100)
-        assert "stop_strings" in qwen_kwargs
         assert qwen_kwargs["max_tokens"] == 100
+
+        # Test stop sequences are properly configured for Qwen
+        qwen_stop_sequences = _get_stop_sequences("qwen-test-model")
+        assert len(qwen_stop_sequences) > 0
+        assert any("im_end" in stop for stop in qwen_stop_sequences)
 
         # Test non-Qwen model
         other_kwargs = _setup_generation_kwargs("gpt-4", max_tokens=200)
-        assert "stop_strings" not in other_kwargs
         assert other_kwargs["max_tokens"] == 200
+
+        # Test non-Qwen model has no default stop sequences
+        other_stop_sequences = _get_stop_sequences("gpt-4")
+        assert len(other_stop_sequences) == 0
 
     def test_environment_variable_integration(self, test_env_vars):
         """Test that environment variables are properly integrated."""
