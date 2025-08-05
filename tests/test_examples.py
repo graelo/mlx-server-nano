@@ -305,22 +305,26 @@ def test_example_using_custom_fixture(example_complex_tool):
 
 # Example of parametrized test
 @pytest.mark.parametrize(
-    "model_name,expected_stop_strings",
+    "model_name,chat_template,expected_stop_strings",
     [
-        ("qwen-chat", True),
-        ("devstral-model", True),  # Now has default stop strings
-        ("gpt-4", False),
+        ("qwen-chat", "qwen3", True),
+        ("devstral-model", "devstral", True),
+        ("gpt-4", "none", False),
     ],
 )
-def test_example_parametrized(model_name, expected_stop_strings):
-    """Example: Parametrized test for different model configurations."""
+def test_example_parametrized(model_name, chat_template, expected_stop_strings):
+    """Example: Parametrized test for different template configurations."""
     from mlx_server_nano.model_manager import (
         _setup_generation_kwargs,
         _get_stop_sequences,
     )
 
     kwargs = _setup_generation_kwargs(model_name)
-    stop_sequences = _get_stop_sequences(model_name)
+
+    # Mock the config to use the specified chat template
+    with patch("mlx_server_nano.model_manager.config") as mock_config:
+        mock_config.chat_template = chat_template
+        stop_sequences = _get_stop_sequences(model_name)
 
     # generation_kwargs no longer contains stop_strings
     assert "stop_strings" not in kwargs

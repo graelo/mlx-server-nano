@@ -287,11 +287,11 @@ def _get_stop_sequences(
     model_name: str, stop_param: Optional[Union[str, List[str]]] = None
 ) -> List[str]:
     """
-    Get stop sequences from request parameter or model-specific defaults.
+    Get stop sequences from request parameter or chat template defaults.
 
     Args:
         model_name: Name of the model
-        stop_param: Stop parameter from request
+        stop_param: Stop parameter from request (overrides template defaults)
 
     Returns:
         List of stop sequences
@@ -299,6 +299,7 @@ def _get_stop_sequences(
     stop_sequences = []
 
     if stop_param is not None:
+        # Request provided stop sequences - use them and override defaults
         if isinstance(stop_param, str):
             stop_sequences = [stop_param]
             logger.info(f"Using stop string from request: [{stop_param}]")
@@ -306,13 +307,20 @@ def _get_stop_sequences(
             stop_sequences = stop_param
             logger.info(f"Using stop strings from request: {stop_param}")
     else:
-        # Add model-specific stop strings only if no stop parameter provided
-        if "qwen" in model_name.lower():
+        # Use template-specific stop sequences based on config.chat_template
+        if config.chat_template == "qwen3":
             stop_sequences = ["✿RESULT✿:", "✿RETURN✿:", "<|im_end|>"]
-            logger.debug("Added Qwen stop strings")
-        elif "devstral" in model_name.lower() or "mistral" in model_name.lower():
+            logger.debug("Added Qwen3 template stop strings")
+        elif config.chat_template == "devstral":
             stop_sequences = ["[/B_INST]", "[/TOOL_CALLS]"]
-            logger.debug("Added Devstral/Mistral stop strings")
+            logger.debug("Added Devstral template stop strings")
+        elif config.chat_template == "none":
+            # No template-specific stop sequences for raw mode
+            logger.debug("No template stop strings (using none template)")
+        else:
+            logger.debug(
+                f"No predefined stop strings for template: {config.chat_template}"
+            )
 
     return stop_sequences
 
@@ -445,7 +453,9 @@ def generate_response_with_tools(
     # Format the prompt with tools
     try:
         logger.debug("Formatting messages for model")
-        prompt = format_messages_for_model(messages, model_name, tools)
+        prompt = format_messages_for_model(
+            messages, model_name, tools, config.chat_template
+        )
         logger.debug(f"Formatted prompt length: {len(prompt)} characters")
         logger.debug(f"Formatted prompt preview: {prompt[:200]}...")
     except Exception as e:
@@ -527,7 +537,9 @@ def generate_response_stream(
 
     # Format messages for the model
     try:
-        prompt = format_messages_for_model(messages, model_name, tools)
+        prompt = format_messages_for_model(
+            messages, model_name, tools, config.chat_template
+        )
         logger.debug(f"Formatted prompt for streaming: {prompt}")
     except Exception as e:
         logger.error(f"Failed to format messages: {e}", exc_info=True)

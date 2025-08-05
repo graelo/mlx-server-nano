@@ -21,7 +21,10 @@ logger = logging.getLogger(__name__)
 
 
 def format_messages_for_model(
-    messages: list[Message], model_name: str, tools: Optional[list[Tool]] = None
+    messages: list[Message],
+    model_name: str,
+    tools: Optional[list[Tool]] = None,
+    chat_template: str = "none",
 ) -> str:
     """
     Format messages using model-specific chat template.
@@ -30,6 +33,7 @@ def format_messages_for_model(
         messages: List of conversation messages
         model_name: Name of the model to format for
         tools: Optional list of available tools
+        chat_template: Chat template to use. Options: "none", "devstral", "qwen3"
 
     Returns:
         Formatted prompt string ready for the model
@@ -38,16 +42,18 @@ def format_messages_for_model(
         Exception: If formatting fails for any reason
     """
     logger.debug(
-        f"Formatting messages for model: {model_name}, message count: {len(messages)}, tools: {len(tools) if tools else 0}"
+        f"Formatting messages for model: {model_name}, message count: {len(messages)}, tools: {len(tools) if tools else 0}, chat_template: {chat_template}"
     )
 
-    model_lower = model_name.lower()
+    if chat_template == "none":
+        logger.debug("Using raw message formatting (templates disabled)")
+        return format_raw_messages(messages, tools)
 
     try:
-        if "devstral" in model_lower:
+        if chat_template == "devstral":
             logger.debug("Using Devstral formatting")
             return format_devstral_messages(messages, tools)
-        elif "qwen3" in model_lower or "qwen" in model_lower:
+        elif chat_template == "qwen3":
             logger.debug("Using Qwen formatting")
             return format_qwen3_messages(messages, tools)
         else:
@@ -58,6 +64,30 @@ def format_messages_for_model(
             f"Failed to format messages for model {model_name}: {e}", exc_info=True
         )
         raise
+
+
+def format_raw_messages(
+    messages: list[Message], tools: Optional[list[Tool]] = None
+) -> str:
+    """
+    Pass messages through without template formatting.
+    Assumes client has already applied appropriate formatting.
+
+    Args:
+        messages: List of conversation messages
+        tools: Optional list of available tools (currently ignored in raw mode)
+
+    Returns:
+        Raw concatenated message content
+    """
+    prompt = ""
+
+    # Simple concatenation of message content
+    for message in messages:
+        if message.content:
+            prompt += message.content
+
+    return prompt
 
 
 def format_devstral_messages(

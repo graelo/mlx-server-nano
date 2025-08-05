@@ -33,12 +33,18 @@ def serve(
         config.log_level, help="Log level", show_choices=True, case_sensitive=False
     ),
     reload: bool = typer.Option(False, help="Enable auto-reload for development"),
+    chat_template: str = typer.Option(
+        config.chat_template,
+        "--chat-template",
+        help="Chat template to use for formatting messages. Options: none, devstral, qwen3",
+    ),
 ):
     """Start the MLX Server Nano FastAPI server."""
     # Update config singleton
     config.host = host
     config.port = port
     config.log_level = log_level
+    config.chat_template = chat_template
 
     # Set up logging
     log_level_val = getattr(logging, config.log_level, logging.INFO)
@@ -52,6 +58,7 @@ def serve(
 
     print(f"Starting MLX Server Nano on {config.host}:{config.port}")
     print(f"Log level: {config.log_level}")
+    print(f"Chat template: {config.chat_template}")
     print(f"Using Hugging Face cache (HF_HOME: {os.environ.get('HF_HOME', 'default')})")
 
     uvicorn.run(

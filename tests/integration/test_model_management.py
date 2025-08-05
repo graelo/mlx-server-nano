@@ -444,8 +444,10 @@ class TestModelConfigurationIntegration:
         qwen_kwargs = _setup_generation_kwargs("qwen-test-model", max_tokens=100)
         assert qwen_kwargs["max_tokens"] == 100
 
-        # Test stop sequences are properly configured for Qwen
-        qwen_stop_sequences = _get_stop_sequences("qwen-test-model")
+        # Test stop sequences are properly configured for Qwen3 template
+        with patch("mlx_server_nano.model_manager.config") as mock_config:
+            mock_config.chat_template = "qwen3"
+            qwen_stop_sequences = _get_stop_sequences("qwen-test-model")
         assert len(qwen_stop_sequences) > 0
         assert any("im_end" in stop for stop in qwen_stop_sequences)
 
@@ -453,8 +455,10 @@ class TestModelConfigurationIntegration:
         other_kwargs = _setup_generation_kwargs("gpt-4", max_tokens=200)
         assert other_kwargs["max_tokens"] == 200
 
-        # Test non-Qwen model has no default stop sequences
-        other_stop_sequences = _get_stop_sequences("gpt-4")
+        # Test none template has no default stop sequences
+        with patch("mlx_server_nano.model_manager.config") as mock_config:
+            mock_config.chat_template = "none"
+            other_stop_sequences = _get_stop_sequences("gpt-4")
         assert len(other_stop_sequences) == 0
 
     def test_environment_variable_integration(self, test_env_vars):
