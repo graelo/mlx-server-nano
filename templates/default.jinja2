@@ -1,0 +1,30 @@
+{#- Default Chat Template for MLX Server Nano -#}
+{#- Generic fallback template for unknown models -#}
+
+{%- for message in messages %}
+    {%- if message.role == "system" %}
+System: {{ message.content }}
+
+        {%- if tools %}
+Available Tools:
+            {%- for tool in tools %}
+- {{ tool.function.name }}: {{ tool.function.description }}
+            {%- endfor %}
+        {%- endif %}
+    {%- elif message.role == "user" %}
+User: {{ message.content }}
+    {%- elif message.role == "assistant" %}
+Assistant: 
+        {%- if message.tool_calls %}
+            {%- for tool_call in message.tool_calls %}
+[Tool Call: {{ tool_call.function.name }}({{ tool_call.function.arguments }})]
+            {%- endfor %}
+        {%- endif %}
+        {%- if message.content %}
+{{ message.content }}
+        {%- endif %}
+    {%- elif message.role == "tool" %}
+Tool Result: {{ message.content }}
+    {%- endif %}
+{%- endfor %}
+Assistant: 

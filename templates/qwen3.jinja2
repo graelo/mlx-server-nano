@@ -1,0 +1,54 @@
+{#- Qwen3 Chat Template for MLX Server Nano -#}
+{#- Compatible with Qwen2.5 and Qwen3 models -#}
+
+{%- set system_message = "You are a helpful assistant." -%}
+
+{#- Find system message if provided -#}
+{%- for message in messages -%}
+    {%- if message.role == "system" -%}
+        {%- set system_message = message.content -%}
+    {%- endif -%}
+{%- endfor -%}
+
+{#- Start with system message -#}
+<|im_start|>system
+{{ system_message }}
+{%- if tools %}
+
+# Available Tools
+{%- for tool in tools %}
+## {{ tool.function.name }}
+{{ tool.function.description }}
+
+Parameters:
+{{ tool.function.parameters | tojson(indent=2) }}
+{%- endfor %}
+
+To use a tool, respond with:
+✿FUNCTION✿: tool_name
+✿ARGS✿: {"arg1": "value1", "arg2": "value2"}
+
+After receiving tool results, continue the conversation naturally.
+{%- endif %}
+<|im_end|>
+{%- for message in messages %}
+    {%- if message.role == "user" %}
+<|im_start|>user
+{{ message.content }}<|im_end|>
+    {%- elif message.role == "assistant" %}
+<|im_start|>assistant
+        {%- if message.tool_calls %}
+            {%- for tool_call in message.tool_calls %}
+✿FUNCTION✿: {{ tool_call.function.name }}
+✿ARGS✿: {{ tool_call.function.arguments }}
+            {%- endfor %}
+        {%- endif %}
+        {%- if message.content %}
+✿RETURN✿: {{ message.content }}
+        {%- endif %}
+<|im_end|>
+    {%- elif message.role == "tool" %}
+✿RESULT✿: {{ message.content }}
+    {%- endif %}
+{%- endfor %}
+<|im_start|>assistant

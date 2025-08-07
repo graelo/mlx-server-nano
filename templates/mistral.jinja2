@@ -1,0 +1,42 @@
+{#- Mistral Chat Template for MLX Server Nano -#}
+{#- Compatible with Mistral 7B and other Mistral models -#}
+
+{%- for message in messages %}
+    {%- if message.role == "system" %}
+        {%- if tools %}
+<s>[INST] {{ message.content }}
+
+Available tools:
+            {%- for tool in tools %}
+- {{ tool.function.name }}: {{ tool.function.description }}
+  Parameters: {{ tool.function.parameters | tojson }}
+            {%- endfor %}
+
+To use a tool, respond with:
+[TOOL_USE]{"name": "tool_name", "arguments": {"arg1": "value1"}}[/TOOL_USE] [/INST]
+        {%- else %}
+<s>[INST] {{ message.content }} [/INST]
+        {%- endif %}
+    {%- elif message.role == "user" %}
+        {%- if loop.first and not (messages[0].role == "system") %}
+<s>[INST] {{ message.content }} [/INST]
+        {%- else %}
+<s>[INST] {{ message.content }} [/INST]
+        {%- endif %}
+    {%- elif message.role == "assistant" %}
+        {%- if message.tool_calls %}
+            {%- for tool_call in message.tool_calls %}
+[TOOL_USE]{"name": "{{ tool_call.function.name }}", "arguments": {{ tool_call.function.arguments }}}[/TOOL_USE]
+            {%- endfor %}
+        {%- endif %}
+        {%- if message.content %}
+{{ message.content }}
+        {%- endif %}
+</s>
+    {%- elif message.role == "tool" %}
+[TOOL_RESULT]{{ message.content }}[/TOOL_RESULT]
+    {%- endif %}
+{%- endfor %}
+{%- if messages|length == 0 or messages[-1].role != "assistant" %}
+{#- No trailing space for assistant start -#}
+{%- endif %}

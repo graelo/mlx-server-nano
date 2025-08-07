@@ -8,6 +8,7 @@ that can be used across all test modules.
 import asyncio
 import os
 import pytest
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from fastapi.testclient import TestClient
@@ -41,7 +42,36 @@ def test_config():
         default_max_tokens=100,
         default_temperature=0.1,
         log_level="DEBUG",
+        templates_dir="templates",  # Add templates directory for tests
     )
+
+
+@pytest.fixture
+def template_manager_initialized():
+    """Initialize the template manager for tests using the project templates directory."""
+    from mlx_server_nano.template_manager import (
+        initialize_template_manager,
+        get_template_manager,
+    )
+
+    # Get the project root directory (assuming tests are in project_root/tests/)
+    project_root = Path(__file__).parent.parent
+    templates_dir = project_root / "templates"
+
+    # Initialize template manager with project templates
+    initialize_template_manager(str(templates_dir))
+
+    # Verify initialization
+    template_manager = get_template_manager()
+    assert template_manager is not None, "Template manager should be initialized"
+    assert template_manager.enabled, "Template manager should be enabled"
+
+    yield template_manager
+
+    # Cleanup - reset template manager after test
+    import mlx_server_nano.template_manager as tm
+
+    tm._template_manager = None
 
 
 @pytest.fixture
@@ -71,8 +101,8 @@ def test_env_vars(test_config):
 
 
 @pytest.fixture
-def client():
-    """Provide a FastAPI test client."""
+def client(template_manager_initialized):
+    """Provide a FastAPI test client with initialized template manager."""
     with TestClient(app) as test_client:
         yield test_client
 

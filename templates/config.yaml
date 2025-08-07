@@ -1,0 +1,28 @@
+# Template Configuration for MLX Server Nano
+# This file maps model name patterns to Jinja2 templates and defines stop sequences
+
+# Template selection rules (evaluated in order)
+template_rules:
+  # Qwen models
+  - pattern: ".*qwen.*"
+    template: "qwen3.jinja2"
+    stop_sequences: ["✿RESULT✿:", "✿RETURN✿:", "<|im_end|>"]
+  
+  # Devstral models  
+  - pattern: ".*devstral.*"
+    template: "devstral.jinja2"
+    stop_sequences: ["[/B_INST]", "[/TOOL_CALLS]"]
+    
+  # Llama models
+  - pattern: ".*llama.*"
+    template: "llama.jinja2"
+    stop_sequences: ["<|eot_id|>"]
+    
+  # Mistral models  
+  - pattern: ".*mistral.*"
+    template: "mistral.jinja2"
+    stop_sequences: ["</s>"]
+
+# Default template if no pattern matches
+default_template: "default.jinja2"
+default_stop_sequences: []

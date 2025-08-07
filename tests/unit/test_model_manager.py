@@ -235,14 +235,14 @@ class TestSetupGenerationKwargs:
 
         assert kwargs["max_tokens"] == 200
 
-    def test_setup_generation_kwargs_qwen_stop_strings(self):
+    def test_setup_generation_kwargs_qwen_stop_strings(
+        self, template_manager_initialized
+    ):
         """Test that qwen3 template gets special stop strings."""
         kwargs = _setup_generation_kwargs("qwen-model")
 
-        # Mock the config to use qwen3 template
-        with patch("mlx_server_nano.model_manager.config") as mock_config:
-            mock_config.chat_template = "qwen3"
-            stop_sequences = _get_stop_sequences("qwen-model")
+        # Template manager should provide stop sequences for qwen models
+        stop_sequences = _get_stop_sequences("qwen-model")
 
         # generation_kwargs no longer contains stop_strings
         assert "stop_strings" not in kwargs
@@ -253,26 +253,26 @@ class TestSetupGenerationKwargs:
         assert "✿RETURN✿:" in stop_sequences
         assert "<|im_end|>" in stop_sequences
 
-    def test_setup_generation_kwargs_non_qwen_no_stop_strings(self):
-        """Test that none template doesn't get stop strings."""
+    def test_setup_generation_kwargs_non_qwen_no_stop_strings(
+        self, template_manager_initialized
+    ):
+        """Test that models without template configuration don't get stop strings."""
         kwargs = _setup_generation_kwargs("gpt-4")
 
-        # Mock the config to use none template (default)
-        with patch("mlx_server_nano.model_manager.config") as mock_config:
-            mock_config.chat_template = "none"
-            stop_sequences = _get_stop_sequences("gpt-4")
+        # Models without template configuration should have no stop sequences
+        stop_sequences = _get_stop_sequences("gpt-4")
 
         assert "stop_strings" not in kwargs
         assert len(stop_sequences) == 0
 
-    def test_setup_generation_kwargs_devstral_stop_strings(self):
+    def test_setup_generation_kwargs_devstral_stop_strings(
+        self, template_manager_initialized
+    ):
         """Test that devstral template gets special stop strings."""
         kwargs = _setup_generation_kwargs("devstral-model")
 
-        # Mock the config to use devstral template
-        with patch("mlx_server_nano.model_manager.config") as mock_config:
-            mock_config.chat_template = "devstral"
-            stop_sequences = _get_stop_sequences("devstral-model")
+        # Template manager should provide stop sequences for devstral models
+        stop_sequences = _get_stop_sequences("devstral-model")
 
         # generation_kwargs no longer contains stop_strings
         assert "stop_strings" not in kwargs
@@ -282,18 +282,17 @@ class TestSetupGenerationKwargs:
         assert "[/B_INST]" in stop_sequences
         assert "[/TOOL_CALLS]" in stop_sequences
 
-    def test_setup_generation_kwargs_stop_param_override(self):
+    def test_setup_generation_kwargs_stop_param_override(
+        self, template_manager_initialized
+    ):
         """Test that stop parameter overrides template defaults."""
-        # Mock the config to use qwen3 template
-        with patch("mlx_server_nano.model_manager.config") as mock_config:
-            mock_config.chat_template = "qwen3"
-            # Test with string stop parameter
-            stop_sequences = _get_stop_sequences("qwen-model", "custom_stop")
-            assert stop_sequences == ["custom_stop"]
+        # Test with string stop parameter
+        stop_sequences = _get_stop_sequences("qwen-model", "custom_stop")
+        assert stop_sequences == ["custom_stop"]
 
-            # Test with list stop parameter
-            stop_sequences = _get_stop_sequences("qwen-model", ["stop1", "stop2"])
-            assert stop_sequences == ["stop1", "stop2"]
+        # Test with list stop parameter
+        stop_sequences = _get_stop_sequences("qwen-model", ["stop1", "stop2"])
+        assert stop_sequences == ["stop1", "stop2"]
 
 
 @pytest.mark.unit

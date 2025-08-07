@@ -33,20 +33,27 @@ def serve(
         config.log_level, help="Log level", show_choices=True, case_sensitive=False
     ),
     reload: bool = typer.Option(False, help="Enable auto-reload for development"),
-    chat_template: str = typer.Option(
-        config.chat_template,
-        "--chat-template",
-        help="Chat template to use for formatting messages. Options: none, devstral, qwen3",
+    templates_dir: str = typer.Option(
+        config.templates_dir,
+        "--templates-dir",
+        help="Directory containing Jinja2 templates and config.yaml for extensible chat template system (required)",
     ),
 ):
     """Start the MLX Server Nano FastAPI server."""
+    # Validate required arguments
+    if not templates_dir:
+        print("Error: --templates-dir is required for the extensible template system.")
+        print("Please specify a directory containing Jinja2 templates and config.yaml")
+        print("Example: mlx-server-nano --templates-dir ./templates")
+        raise typer.Exit(1)
+
     # Update config singleton
     config.host = host
     config.port = port
     config.log_level = log_level
-    config.chat_template = chat_template
+    config.templates_dir = templates_dir
 
-    # Set up logging
+    # Set up logging first so template manager logs are visible
     log_level_val = getattr(logging, config.log_level, logging.INFO)
     logging.basicConfig(
         level=log_level_val,
@@ -56,9 +63,27 @@ def serve(
     logging.getLogger("mlx_server_nano").setLevel(log_level_val)
     logging.getLogger("uvicorn").setLevel(logging.INFO)
 
+    # Initialize template manager after logging is set up
+    from .template_manager import initialize_template_manager, get_template_manager
+
+    initialize_template_manager(config.templates_dir)
+
+    # Get template manager info for startup messages
+    template_manager = get_template_manager()
+    template_status = (
+        "enabled" if template_manager and template_manager.enabled else "disabled"
+    )
+
     print(f"Starting MLX Server Nano on {config.host}:{config.port}")
     print(f"Log level: {config.log_level}")
-    print(f"Chat template: {config.chat_template}")
+    template_count = (
+        len(template_manager.rules)
+        if template_manager and template_manager.enabled
+        else 0
+    )
+    print(
+        f"Templates: {template_status} ({template_count} rules) - {config.templates_dir}"
+    )
     print(f"Using Hugging Face cache (HF_HOME: {os.environ.get('HF_HOME', 'default')})")
 
     uvicorn.run(

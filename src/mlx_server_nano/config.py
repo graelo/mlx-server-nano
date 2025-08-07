@@ -11,11 +11,12 @@ Environment Variables:
 - MLX_DEFAULT_MAX_TOKENS: Default max tokens for generation (default: 512)
 - MLX_DEFAULT_TEMPERATURE: Default temperature for generation (default: 0.7)
 - MLX_LOG_LEVEL: Logging level (default: INFO)
-- MLX_CHAT_TEMPLATE: Chat template to use (default: none). Options: none, devstral, qwen3
+- MLX_TEMPLATES_DIR: Directory containing Jinja2 templates and config.yaml (optional)
 """
 
 import os
 from dataclasses import dataclass
+from typing import Optional
 
 
 @dataclass
@@ -28,7 +29,7 @@ class ServerConfig:
     default_max_tokens: int = 512
     default_temperature: float = 0.7
     log_level: str = "INFO"
-    chat_template: str = "none"
+    templates_dir: Optional[str] = None
 
     @classmethod
     def from_env(cls) -> "ServerConfig":
@@ -40,7 +41,7 @@ class ServerConfig:
             default_max_tokens=int(os.environ.get("MLX_DEFAULT_MAX_TOKENS", "512")),
             default_temperature=float(os.environ.get("MLX_DEFAULT_TEMPERATURE", "0.7")),
             log_level=os.environ.get("MLX_LOG_LEVEL", "INFO"),
-            chat_template=os.environ.get("MLX_CHAT_TEMPLATE", "none"),
+            templates_dir=os.environ.get("MLX_TEMPLATES_DIR"),
         )
 
 

@@ -471,8 +471,10 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
+    { name = "jinja2" },
     { name = "mistral-common" },
     { name = "mlx-lm" },
+    { name = "pyyaml" },
     { name = "typer" },
     { name = "uvicorn", extra = ["standard"] },
 ]
@@ -494,8 +496,10 @@ test = [
 [package.metadata]
 requires-dist = [
     { name = "fastapi", specifier = ">=0.116.1" },
+    { name = "jinja2", specifier = ">=3.1.0" },
     { name = "mistral-common", specifier = ">=1.8.3" },
     { name = "mlx-lm", git = "https://github.com/graelo/mlx-lm?branch=feat%2Ftekken" },
+    { name = "pyyaml", specifier = ">=6.0.0" },
     { name = "typer", specifier = ">=0.12.3" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.35.0" },
 ]

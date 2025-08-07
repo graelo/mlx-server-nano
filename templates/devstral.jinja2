@@ -1,0 +1,66 @@
+{#- Devstral Chat Template for MLX Server Nano -#}
+{#- Based on Unsloth's Devstral template with tool calling support -#}
+
+{%- set default_system_message = 'You are Devstral, a helpful agentic model created by Mistral AI. You are an expert developer and can help with coding, debugging, system design, and technical problem solving. You have access to tools that allow you to examine code, run commands, and interact with systems. Use these tools appropriately to help solve problems.' -%}
+
+{%- set system_message = default_system_message -%}
+
+{#- Find system message if provided -#}
+{%- for message in messages -%}
+    {%- if message.role == "system" -%}
+        {%- set system_message = message.content -%}
+    {%- endif -%}
+{%- endfor -%}
+
+{#- Include tools information if available -#}
+{%- set tools_description = "" -%}
+{%- if tools is defined and tools is not none and tools|length > 0 -%}
+    {%- set tools_description = "[AVAILABLE_TOOLS]" + (tools | tojson) + "[/AVAILABLE_TOOLS]" -%}
+{%- endif -%}
+
+{#- Start with system prompt -#}
+[SYSTEM_PROMPT]{{ system_message }}
+
+{{ tools_description }}[/SYSTEM_PROMPT]
+
+{#- Process conversation messages -#}
+{%- for message in messages -%}
+    {%- if message.role == "user" -%}
+        {%- if message.content is string -%}
+[INST]{{ message.content }}
+        {%- else -%}
+[INST]
+            {%- for block in message.content -%}
+                {%- if block.type == "text" -%}
+{{ block.text }}
+                {%- elif block.type in ["image", "image_url"] -%}
+[IMG]
+                {%- endif -%}
+            {%- endfor -%}
+        {%- endif -%}
+    {%- elif message.role == "assistant" -%}
+[/INST]
+        {%- if message.tool_calls is defined and message.tool_calls is not none -%}
+            {%- for tool_call in message.tool_calls -%}
+                {%- set arguments = tool_call.function.arguments -%}
+                {%- if arguments is string -%}
+                    {%- set arguments = arguments -%}
+                {%- else -%}
+                    {%- set arguments = arguments | tojson -%}
+                {%- endif -%}
+[TOOL_CALLS]{{ tool_call.function.name }}[ARGS]{{ arguments }}
+            {%- endfor -%}
+        {%- endif -%}
+        {%- if message.content -%}
+{{ message.content }}
+        {%- endif -%}
+{{ eos_token }}
+    {%- elif message.role == "tool" or message.role == "tool_results" -%}
+[TOOL_RESULTS]{{ message.content | string }}[/TOOL_RESULTS]
+    {%- endif -%}
+{%- endfor -%}
+
+{#- For final user message, add opening for assistant response -#}
+{%- if messages|length > 0 and messages[-1].role == "user" -%}
+[/INST]
+{%- endif -%}

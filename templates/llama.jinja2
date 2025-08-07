@@ -1,0 +1,54 @@
+{#- Llama Chat Template for MLX Server Nano -#}
+{#- Compatible with Llama 3.1+ models -#}
+
+{{ bos_token }}{%- for message in messages %}
+    {%- if message.role == "system" %}
+        {%- if tools %}
+<|start_header_id|>system<|end_header_id|>
+
+{{ message.content }}
+
+# Available Tools
+            {%- for tool in tools %}
+## {{ tool.function.name }}
+{{ tool.function.description }}
+
+Parameters: {{ tool.function.parameters | tojson }}
+            {%- endfor %}
+
+To use a tool, respond with a function call in this format:
+<function_call>
+{"name": "tool_name", "arguments": {"arg1": "value1"}}
+</function_call><|eot_id|>
+        {%- else %}
+<|start_header_id|>system<|end_header_id|>
+
+{{ message.content }}<|eot_id|>
+        {%- endif %}
+    {%- elif message.role == "user" %}
+<|start_header_id|>user<|end_header_id|>
+
+{{ message.content }}<|eot_id|>
+    {%- elif message.role == "assistant" %}
+<|start_header_id|>assistant<|end_header_id|>
+
+        {%- if message.tool_calls %}
+            {%- for tool_call in message.tool_calls %}
+<function_call>
+{"name": "{{ tool_call.function.name }}", "arguments": {{ tool_call.function.arguments }}}
+</function_call>
+            {%- endfor %}
+        {%- endif %}
+        {%- if message.content %}
+{{ message.content }}
+        {%- endif %}<|eot_id|>
+    {%- elif message.role == "tool" %}
+<|start_header_id|>tool<|end_header_id|>
+
+{{ message.content }}<|eot_id|>
+    {%- endif %}
+{%- endfor %}
+{%- if messages|length == 0 or messages[-1].role != "assistant" %}
+<|start_header_id|>assistant<|end_header_id|>
+
+{%- endif %}
