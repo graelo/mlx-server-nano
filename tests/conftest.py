@@ -79,49 +79,54 @@ def client():
 async def clean_model_manager():
     """Clean model manager state before and after tests with proper async cleanup."""
     # Save original state
-    original_model = model_manager._loaded_model
-    original_name = model_manager._model_name
-    original_last_used = model_manager._last_used_time
+    original_model = model_manager.cache._loaded_model
+    original_name = model_manager.cache._model_name
+    original_last_used = model_manager.cache._last_used_time
     original_events = (
-        model_manager._unload_requested,
-        model_manager._shutdown_requested,
+        model_manager.background_tasks._unload_requested,
+        model_manager.background_tasks._shutdown_requested,
     )
-    original_task = model_manager._model_unloader_task
+    original_task = model_manager.background_tasks._model_unloader_task
 
     # Create fresh events for this test
-    model_manager._unload_requested = asyncio.Event()
-    model_manager._shutdown_requested = asyncio.Event()
-    model_manager._model_unloader_task = None
+    model_manager.background_tasks._unload_requested = asyncio.Event()
+    model_manager.background_tasks._shutdown_requested = asyncio.Event()
+    model_manager.background_tasks._model_unloader_task = None
 
     # Clean model state
-    model_manager._loaded_model = None
-    model_manager._model_name = None
-    model_manager._last_used_time = 0
+    model_manager.cache._loaded_model = None
+    model_manager.cache._model_name = None
+    model_manager.cache._last_used_time = 0
 
     yield
 
     # Cleanup and restore
     if (
-        model_manager._model_unloader_task
-        and not model_manager._model_unloader_task.done()
+        model_manager.background_tasks._model_unloader_task
+        and not model_manager.background_tasks._model_unloader_task.done()
     ):
-        model_manager._shutdown_requested.set()
+        model_manager.background_tasks._shutdown_requested.set()
         try:
-            await asyncio.wait_for(model_manager._model_unloader_task, timeout=1.0)
+            await asyncio.wait_for(
+                model_manager.background_tasks._model_unloader_task, timeout=1.0
+            )
         except asyncio.TimeoutError:
-            if model_manager._model_unloader_task is not None:
-                model_manager._model_unloader_task.cancel()
+            if model_manager.background_tasks._model_unloader_task is not None:
+                model_manager.background_tasks._model_unloader_task.cancel()
                 try:
-                    await model_manager._model_unloader_task  # pyright: ignore[reportGeneralTypeIssues]
+                    await model_manager.background_tasks._model_unloader_task  # pyright: ignore[reportGeneralTypeIssues]
                 except asyncio.CancelledError:
                     pass
 
     # Restore original state (best effort)
-    model_manager._loaded_model = original_model
-    model_manager._model_name = original_name
-    model_manager._last_used_time = original_last_used
-    model_manager._unload_requested, model_manager._shutdown_requested = original_events
-    model_manager._model_unloader_task = original_task
+    model_manager.cache._loaded_model = original_model
+    model_manager.cache._model_name = original_name
+    model_manager.cache._last_used_time = original_last_used
+    (
+        model_manager.background_tasks._unload_requested,
+        model_manager.background_tasks._shutdown_requested,
+    ) = original_events
+    model_manager.background_tasks._model_unloader_task = original_task
 
 
 @pytest.fixture
@@ -133,6 +138,14 @@ def mock_mlx_load():
         mock_tokenizer = MagicMock()
         mock_tokenizer.bos_token = "<s>"
         mock_tokenizer.eos_token = "</s>"
+        # Mock apply_chat_template to return tokens (as it should)
+        mock_tokenizer.apply_chat_template.return_value = [
+            1,
+            2,
+            3,
+            4,
+            5,
+        ]  # Mock token array
         mock_load.return_value = (mock_model, mock_tokenizer)
         yield mock_load
 
@@ -140,7 +153,7 @@ def mock_mlx_load():
 @pytest.fixture
 def mock_mlx_generate():
     """Mock the mlx_lm.generate function."""
-    with patch("mlx_server_nano.model_manager.generate") as mock_generate:
+    with patch("mlx_server_nano.model_manager.generation.generate") as mock_generate:
         mock_generate.return_value = "Test response"
         yield mock_generate
 
@@ -148,7 +161,9 @@ def mock_mlx_generate():
 @pytest.fixture
 def mock_mlx_stream_generate():
     """Mock the mlx_lm.stream_generate function."""
-    with patch("mlx_server_nano.model_manager.stream_generate") as mock_stream:
+    with patch(
+        "mlx_server_nano.model_manager.generation.stream_generate"
+    ) as mock_stream:
         mock_stream.return_value = iter(["Test", " response", " chunk"])
         yield mock_stream
 

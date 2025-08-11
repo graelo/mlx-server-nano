@@ -49,14 +49,14 @@ class TestUnloadModel:
     def test_unload_model_when_no_model_loaded(self, clean_model_manager):
         """Test unloading when no model is loaded."""
         # Ensure no model is loaded
-        model_manager._loaded_model = None
-        model_manager._model_name = None
+        model_manager.cache._loaded_model = None
+        model_manager.cache._model_name = None
 
         # Should not raise any errors
         _unload_model()
 
-        assert model_manager._loaded_model is None
-        assert model_manager._model_name is None
+        assert model_manager.cache._loaded_model is None
+        assert model_manager.cache._model_name is None
 
     @patch("mlx.core.clear_cache")
     @patch("gc.collect")
@@ -67,8 +67,8 @@ class TestUnloadModel:
         # Set up loaded model
         mock_model = MagicMock()
         mock_tokenizer = MagicMock()
-        model_manager._loaded_model = (mock_model, mock_tokenizer)
-        model_manager._model_name = "test-model"
+        model_manager.cache._loaded_model = (mock_model, mock_tokenizer)
+        model_manager.cache._model_name = "test-model"
 
         # Configure mocks
         mock_gc_collect.return_value = 5  # Simulate collected objects
@@ -77,8 +77,8 @@ class TestUnloadModel:
         _unload_model()
 
         # Verify state is cleared
-        assert model_manager._loaded_model is None
-        assert model_manager._model_name is None
+        assert model_manager.cache._loaded_model is None
+        assert model_manager.cache._model_name is None
 
         # Verify cleanup was called
         mock_clear_cache.assert_called_once()
@@ -90,8 +90,8 @@ class TestUnloadModel:
     ):
         """Test handling of clear_cache errors."""
         # Set up loaded model
-        model_manager._loaded_model = (MagicMock(), MagicMock())
-        model_manager._model_name = "test-model"
+        model_manager.cache._loaded_model = (MagicMock(), MagicMock())
+        model_manager.cache._model_name = "test-model"
 
         # Make clear_cache raise an error
         mock_clear_cache.side_effect = Exception("Cache clear failed")
@@ -100,8 +100,8 @@ class TestUnloadModel:
         _unload_model()
 
         # Model should still be unloaded
-        assert model_manager._loaded_model is None
-        assert model_manager._model_name is None
+        assert model_manager.cache._loaded_model is None
+        assert model_manager.cache._model_name is None
 
 
 @pytest.mark.unit
@@ -111,25 +111,25 @@ class TestScheduleUnload:
     def test_schedule_unload_sets_event(self):
         """Test that schedule unload sets the unload event."""
         # Reset events
-        model_manager._unload_requested.clear()
-        model_manager._shutdown_requested.clear()
+        model_manager.background_tasks._unload_requested.clear()
+        model_manager.background_tasks._shutdown_requested.clear()
 
         _schedule_unload()
 
-        assert model_manager._unload_requested.is_set()
+        assert model_manager.background_tasks._unload_requested.is_set()
 
     def test_schedule_unload_when_shutdown_requested(self):
         """Test that schedule unload doesn't set event when shutdown is requested."""
-        model_manager._shutdown_requested.set()
-        model_manager._unload_requested.clear()
+        model_manager.background_tasks._shutdown_requested.set()
+        model_manager.background_tasks._unload_requested.clear()
 
         _schedule_unload()
 
         # Should not set unload event when shutdown is requested
-        assert not model_manager._unload_requested.is_set()
+        assert not model_manager.background_tasks._unload_requested.is_set()
 
         # Clean up
-        model_manager._shutdown_requested.clear()
+        model_manager.background_tasks._shutdown_requested.clear()
 
 
 @pytest.mark.unit
@@ -149,9 +149,9 @@ class TestLoadModel:
 
         # Verify result
         assert result == (mock_model, mock_tokenizer)
-        assert model_manager._loaded_model == (mock_model, mock_tokenizer)
-        assert model_manager._model_name == "test-model"
-        assert model_manager._last_used_time > 0
+        assert model_manager.cache._loaded_model == (mock_model, mock_tokenizer)
+        assert model_manager.cache._model_name == "test-model"
+        assert model_manager.cache._last_used_time > 0
 
         # Verify mlx_lm.load was called
         mock_load.assert_called_once_with("test-model")
@@ -193,11 +193,11 @@ class TestLoadModel:
 
         # Load first model
         result1 = load_model("model-1")
-        assert model_manager._model_name == "model-1"
+        assert model_manager.cache._model_name == "model-1"
 
         # Load different model
         result2 = load_model("model-2")
-        assert model_manager._model_name == "model-2"
+        assert model_manager.cache._model_name == "model-2"
         assert result1 != result2
 
         # Both calls should go to mlx_lm.load
@@ -214,8 +214,8 @@ class TestLoadModel:
             load_model("failing-model")
 
         # Model state should remain clean
-        assert model_manager._loaded_model is None
-        assert model_manager._model_name is None
+        assert model_manager.cache._loaded_model is None
+        assert model_manager.cache._model_name is None
 
 
 @pytest.mark.unit
@@ -289,11 +289,12 @@ class TestSetupGenerationKwargs:
 class TestTryGenerateWithFallback:
     """Test cases for generation with fallback functionality."""
 
-    @patch("mlx_server_nano.model_manager.generate")
+    @patch("mlx_server_nano.model_manager.generation.generate")
     def test_generate_success(self, mock_generate):
         """Test successful generation without fallback."""
         mock_model = MagicMock()
         mock_tokenizer = MagicMock()
+        mock_tokenizer.bos_token = "<s>"  # Set a proper bos_token
         mock_generate.return_value = "Generated response"
 
         result = _try_generate_with_fallback(
@@ -308,12 +309,13 @@ class TestTryGenerateWithFallback:
             max_tokens=50,
         )
 
-    @patch("mlx_server_nano.model_manager.stream_generate")
-    @patch("mlx_server_nano.model_manager.generate")
+    @patch("mlx_server_nano.model_manager.generation.stream_generate")
+    @patch("mlx_server_nano.model_manager.generation.generate")
     def test_generate_fallback_to_stream(self, mock_generate, mock_stream_generate):
         """Test fallback to stream_generate when generate fails."""
         mock_model = MagicMock()
         mock_tokenizer = MagicMock()
+        mock_tokenizer.bos_token = "<s>"  # Set a proper bos_token
 
         # Make generate fail
         mock_generate.side_effect = Exception("Generate failed")
@@ -342,8 +344,8 @@ class TestModelUnloaderLifecycle:
         await start_model_unloader()
 
         # Should have created a task
-        assert model_manager._model_unloader_task is not None
-        assert not model_manager._model_unloader_task.done()
+        assert model_manager.background_tasks._model_unloader_task is not None
+        assert not model_manager.background_tasks._model_unloader_task.done()
 
         # Clean up
         await stop_model_unloader()
@@ -357,9 +359,9 @@ class TestModelUnloaderLifecycle:
         await stop_model_unloader()
 
         # Task should be done and shutdown requested
-        assert model_manager._shutdown_requested.is_set()
-        if model_manager._model_unloader_task:
-            assert model_manager._model_unloader_task.done()
+        assert model_manager.background_tasks._shutdown_requested.is_set()
+        if model_manager.background_tasks._model_unloader_task:
+            assert model_manager.background_tasks._model_unloader_task.done()
 
     async def test_start_unloader_multiple_times(self):
         """Test that starting unloader multiple times doesn't create multiple tasks."""
@@ -368,10 +370,10 @@ class TestModelUnloaderLifecycle:
 
         # Start multiple times
         await start_model_unloader()
-        task1 = model_manager._model_unloader_task
+        task1 = model_manager.background_tasks._model_unloader_task
 
         await start_model_unloader()
-        task2 = model_manager._model_unloader_task
+        task2 = model_manager.background_tasks._model_unloader_task
 
         # Should reuse task if still running
         if task1 and not task1.done():
@@ -385,9 +387,9 @@ class TestModelUnloaderLifecycle:
 class TestGenerateResponseIntegration:
     """Test cases for response generation functions (mocked)."""
 
-    @patch("mlx_server_nano.model_manager.load_model")
-    @patch("mlx_server_nano.model_manager._try_generate_with_fallback")
-    @patch("mlx_server_nano.model_manager.parse_tool_calls")
+    @patch("mlx_server_nano.model_manager.generation.load_model")
+    @patch("mlx_server_nano.model_manager.generation._try_generate_with_fallback")
+    @patch("mlx_server_nano.model_manager.generation.parse_tool_calls")
     def test_generate_response_with_tools_success(
         self, mock_parse_tools, mock_generate, mock_load_model
     ):
@@ -418,7 +420,7 @@ class TestGenerateResponseIntegration:
         mock_generate.assert_called_once()
         mock_parse_tools.assert_called_once_with("model response")
 
-    @patch("mlx_server_nano.model_manager.load_model")
+    @patch("mlx_server_nano.model_manager.generation.load_model")
     def test_generate_response_with_tools_load_error(self, mock_load_model):
         """Test error handling when model loading fails."""
         mock_load_model.side_effect = Exception("Load failed")
@@ -426,8 +428,8 @@ class TestGenerateResponseIntegration:
         with pytest.raises(Exception):
             generate_response_with_tools("test-model", [])
 
-    @patch("mlx_server_nano.model_manager.load_model")
-    @patch("mlx_server_nano.model_manager.stream_generate")
+    @patch("mlx_server_nano.model_manager.generation.load_model")
+    @patch("mlx_server_nano.model_manager.generation.stream_generate")
     def test_generate_response_stream_success(self, mock_stream, mock_load_model):
         """Test successful streaming response generation."""
         # Configure mocks

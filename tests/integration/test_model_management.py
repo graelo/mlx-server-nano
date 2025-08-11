@@ -33,23 +33,23 @@ class TestModelUnloaderIntegration:
         """Test complete model unloader lifecycle."""
         # Ensure clean state
         await stop_model_unloader()
-        model_manager._shutdown_requested.clear()
-        model_manager._unload_requested.clear()
+        model_manager.background_tasks._shutdown_requested.clear()
+        model_manager.background_tasks._unload_requested.clear()
 
         # Start unloader
         await start_model_unloader()
-        assert model_manager._model_unloader_task is not None
-        assert not model_manager._model_unloader_task.done()
+        assert model_manager.background_tasks._model_unloader_task is not None
+        assert not model_manager.background_tasks._model_unloader_task.done()
 
         # Trigger unload event
-        model_manager._unload_requested.set()
+        model_manager.background_tasks._unload_requested.set()
 
         # Wait a short time
         await asyncio.sleep(0.1)
 
         # Stop unloader
         await stop_model_unloader()
-        assert model_manager._shutdown_requested.is_set()
+        assert model_manager.background_tasks._shutdown_requested.is_set()
 
     @patch("mlx_server_nano.model_manager.load")
     async def test_model_loading_with_unloader(
@@ -71,13 +71,13 @@ class TestModelUnloaderIntegration:
             # Load model
             result = load_model("test-model")
             assert result == (mock_model, mock_tokenizer)
-            assert model_manager._loaded_model is not None
-            assert model_manager._model_name == "test-model"
+            assert model_manager.cache._loaded_model is not None
+            assert model_manager.cache._model_name == "test-model"
 
             # Verify unload is scheduled
             assert (
-                model_manager._unload_requested.is_set()
-                or model_manager._last_used_time > 0
+                model_manager.background_tasks._unload_requested.is_set()
+                or model_manager.cache._last_used_time > 0
             )
 
         finally:
@@ -97,7 +97,7 @@ class TestModelUnloaderIntegration:
         unload_completed = asyncio.Event()
 
         # Patch _unload_model to signal completion
-        original_unload = model_manager._unload_model
+        original_unload = model_manager.cache._unload_model
 
         def synchronized_unload():
             result = original_unload()
@@ -108,8 +108,10 @@ class TestModelUnloaderIntegration:
         test_timeout = 2  # From test_env_vars
 
         with (
-            patch.object(model_manager, "_unload_model", synchronized_unload),
-            patch.object(model_manager, "MODEL_IDLE_TIMEOUT", test_timeout),
+            patch.object(model_manager.cache, "_unload_model", synchronized_unload),
+            patch.object(
+                model_manager.background_tasks, "MODEL_IDLE_TIMEOUT", test_timeout
+            ),
         ):
             # Start unloader with short timeout
             await start_model_unloader()
@@ -117,12 +119,12 @@ class TestModelUnloaderIntegration:
             try:
                 # Load model
                 load_model("test-model")
-                assert model_manager._loaded_model is not None
+                assert model_manager.cache._loaded_model is not None
 
                 # Simulate that the model was loaded long ago by setting an old timestamp
                 # This ensures the unload condition will be met after the timeout
                 old_time = model_manager.get_current_time() - (test_timeout + 1)
-                model_manager._last_used_time = old_time
+                model_manager.cache._last_used_time = old_time
 
                 # Wait for actual unload completion (with timeout)
                 await asyncio.wait_for(
@@ -130,8 +132,8 @@ class TestModelUnloaderIntegration:
                 )
 
                 # Now assert the model is unloaded
-                assert model_manager._loaded_model is None
-                assert model_manager._model_name is None
+                assert model_manager.cache._loaded_model is None
+                assert model_manager.cache._model_name is None
 
             finally:
                 await stop_model_unloader()
@@ -151,18 +153,18 @@ class TestModelUnloaderIntegration:
         try:
             # Load model
             load_model("test-model")
-            first_load_time = model_manager._last_used_time
+            first_load_time = model_manager.cache._last_used_time
 
             # Wait a bit
             await asyncio.sleep(1)
 
             # Load same model again (should hit cache)
             load_model("test-model")
-            second_load_time = model_manager._last_used_time
+            second_load_time = model_manager.cache._last_used_time
 
             # Timer should be reset
             assert second_load_time > first_load_time
-            assert model_manager._loaded_model is not None
+            assert model_manager.cache._loaded_model is not None
 
         finally:
             await stop_model_unloader()
@@ -174,11 +176,13 @@ class TestModelGenerationIntegration:
     """Integration tests for model generation with lifecycle management."""
 
     @patch("mlx_server_nano.model_manager.load")
-    @patch("mlx_server_nano.model_manager.generate")
-    @patch("mlx_server_nano.model_manager.parse_tool_calls")
+    @patch("mlx_server_nano.model_manager.generation.generate")
+    @patch("mlx_server_nano.model_manager.generation.stream_generate")
+    @patch("mlx_server_nano.model_manager.generation.parse_tool_calls")
     def test_generate_response_complete_flow(
         self,
         mock_parse_tools,
+        mock_stream_generate,
         mock_generate,
         mock_load,
         clean_model_manager,
@@ -188,8 +192,10 @@ class TestModelGenerationIntegration:
         mock_model = MagicMock()
         mock_tokenizer = MagicMock()
         mock_tokenizer.apply_chat_template.return_value = "formatted prompt"
+        mock_tokenizer.bos_token = "<bos>"  # Add proper bos_token
         mock_load.return_value = (mock_model, mock_tokenizer)
         mock_generate.return_value = "model response"
+        mock_stream_generate.return_value = ["model response"]  # For fallback
 
         # Mock the new tool parsing
         mock_parse_tools.return_value = []  # No tool calls found
@@ -204,9 +210,9 @@ class TestModelGenerationIntegration:
         assert tool_calls == []
 
         # Verify model was loaded and cached
-        assert model_manager._loaded_model == (mock_model, mock_tokenizer)
-        assert model_manager._model_name == "test-model"
-        assert model_manager._last_used_time > 0
+        assert model_manager.cache._loaded_model == (mock_model, mock_tokenizer)
+        assert model_manager.cache._model_name == "test-model"
+        assert model_manager.cache._last_used_time > 0
 
         # Verify all steps were called
         mock_load.assert_called_once_with("test-model")
@@ -216,7 +222,7 @@ class TestModelGenerationIntegration:
         mock_parse_tools.assert_called_once_with("model response")
 
     @patch("mlx_server_nano.model_manager.load")
-    @patch("mlx_server_nano.model_manager.stream_generate")
+    @patch("mlx_server_nano.model_manager.generation.stream_generate")
     def test_generate_stream_complete_flow(
         self, mock_stream, mock_load, clean_model_manager
     ):
@@ -225,6 +231,7 @@ class TestModelGenerationIntegration:
         mock_model = MagicMock()
         mock_tokenizer = MagicMock()
         mock_tokenizer.apply_chat_template.return_value = "formatted prompt"
+        mock_tokenizer.bos_token = "<bos>"  # Add proper bos_token
         mock_load.return_value = (mock_model, mock_tokenizer)
 
         # Mock streaming chunks
@@ -246,8 +253,8 @@ class TestModelGenerationIntegration:
         assert chunks == expected_chunks
 
         # Verify model state
-        assert model_manager._loaded_model == (mock_model, mock_tokenizer)
-        assert model_manager._last_used_time > 0
+        assert model_manager.cache._loaded_model == (mock_model, mock_tokenizer)
+        assert model_manager.cache._last_used_time > 0
 
     @patch("mlx_server_nano.model_manager.load")
     def test_multiple_model_requests_caching(self, mock_load, clean_model_manager):
@@ -279,10 +286,10 @@ class TestModelGenerationIntegration:
 
         # Load different models
         result1 = load_model("model-1")
-        assert model_manager._model_name == "model-1"
+        assert model_manager.cache._model_name == "model-1"
 
         result2 = load_model("model-2")
-        assert model_manager._model_name == "model-2"
+        assert model_manager.cache._model_name == "model-2"
 
         # Should load both models
         assert mock_load.call_count == 2
@@ -310,14 +317,14 @@ class TestMemoryManagement:
 
         # Load then unload model
         load_model("test-model")
-        assert model_manager._loaded_model is not None
+        assert model_manager.cache._loaded_model is not None
 
         # Manually trigger unload (normally done by background task)
-        model_manager._unload_model()
+        model_manager.cache._unload_model()
 
         # Verify state is cleared
-        assert model_manager._loaded_model is None
-        assert model_manager._model_name is None
+        assert model_manager.cache._loaded_model is None
+        assert model_manager.cache._model_name is None
 
         # Verify cleanup was called
         mock_clear_cache.assert_called_once()

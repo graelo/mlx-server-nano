@@ -73,11 +73,13 @@ class TestExampleIntegrationTests:
     """Example integration tests showing realistic scenarios."""
 
     @patch("mlx_server_nano.model_manager.load")
-    @patch("mlx_server_nano.model_manager.generate")
-    @patch("mlx_server_nano.model_manager.parse_tool_calls")
+    @patch("mlx_server_nano.model_manager.generation.generate")
+    @patch("mlx_server_nano.model_manager.generation.stream_generate")
+    @patch("mlx_server_nano.model_manager.generation.parse_tool_calls")
     def test_complete_generation_flow_example(
         self,
         mock_parse_tools,
+        mock_stream_generate,
         mock_generate,
         mock_load,
         clean_model_manager,
@@ -87,8 +89,12 @@ class TestExampleIntegrationTests:
         mock_model = MagicMock()
         mock_tokenizer = MagicMock()
         mock_tokenizer.apply_chat_template.return_value = "User: Hello\nAssistant:"
+        mock_tokenizer.bos_token = "<bos>"
         mock_load.return_value = (mock_model, mock_tokenizer)
         mock_generate.return_value = "Hello! How can I help you?"
+        mock_stream_generate.return_value = [
+            "Hello! How can I help you?"
+        ]  # For fallback
 
         # Mock the new tool parsing
         mock_parse_tools.return_value = []  # No tool calls found
@@ -144,13 +150,13 @@ class TestExampleMemoryTests:
 
         # Act: Load then unload model
         load_model("test-model")
-        assert model_manager._loaded_model is not None
+        assert model_manager.cache._loaded_model is not None
 
-        model_manager._unload_model()
+        model_manager.cache._unload_model()
 
         # Assert: Verify functional cleanup
-        assert model_manager._loaded_model is None
-        assert model_manager._model_name is None
+        assert model_manager.cache._loaded_model is None
+        assert model_manager.cache._model_name is None
         mock_clear_cache.assert_called_once()
         assert mock_gc.call_count >= 1
 
@@ -224,20 +230,26 @@ class TestExampleSlowTests:
 
         try:
             # Verify background task was created and is running
-            assert model_manager._model_unloader_task is not None
-            initial_task_state = model_manager._model_unloader_task.done()
+            assert model_manager.background_tasks._model_unloader_task is not None
+            initial_task_state = (
+                model_manager.background_tasks._model_unloader_task.done()
+            )
 
             # Simulate model usage
-            model_manager._last_used_time = 1000  # Old timestamp
-            model_manager._unload_requested.set()
+            model_manager.cache._last_used_time = 1000  # Old timestamp
+            model_manager.background_tasks._unload_requested.set()
 
             # Give the background task a brief moment to process the event
             await asyncio.sleep(0.1)
 
             # Verify background task is still responsive (not crashed)
             # The task should still be running unless it encountered an error
-            task_is_healthy = model_manager._model_unloader_task is not None and (
-                not model_manager._model_unloader_task.done() or not initial_task_state
+            task_is_healthy = (
+                model_manager.background_tasks._model_unloader_task is not None
+                and (
+                    not model_manager.background_tasks._model_unloader_task.done()
+                    or not initial_task_state
+                )
             )
             assert task_is_healthy
 
