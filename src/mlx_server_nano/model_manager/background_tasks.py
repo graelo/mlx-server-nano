@@ -15,7 +15,8 @@ import asyncio
 import logging
 from typing import Optional
 
-from .cache import MODEL_IDLE_TIMEOUT, get_cache_state, get_current_time, _unload_model
+from .cache import MODEL_IDLE_TIMEOUT, get_cache_state, get_current_time
+from . import cache
 
 # Set up logging
 logger = logging.getLogger(__name__)
@@ -58,25 +59,60 @@ async def _model_unloader_background_task() -> None:
                 # Clear the event for next time
                 _unload_requested.clear()
 
-                # Wait for the idle timeout period
+                # Wait for the idle timeout period, but also listen for new unload requests
                 try:
-                    await asyncio.wait_for(
-                        _shutdown_requested.wait(), timeout=MODEL_IDLE_TIMEOUT
+                    done, pending = await asyncio.wait(
+                        [
+                            asyncio.create_task(_shutdown_requested.wait()),
+                            asyncio.create_task(_unload_requested.wait()),
+                        ],
+                        timeout=MODEL_IDLE_TIMEOUT,
+                        return_when=asyncio.FIRST_COMPLETED,
                     )
-                    # If we get here, shutdown was requested
-                    logger.info(
-                        "Model unloader background task shutting down during timeout"
-                    )
-                    break
-                except asyncio.TimeoutError:
-                    # Timeout expired, check if we should unload
-                    model_name, last_used_time = get_cache_state()
-                    if (
-                        get_current_time() - last_used_time >= MODEL_IDLE_TIMEOUT
-                        and model_name is not None
-                    ):
-                        logger.info(f"Unloading model '{model_name}' due to inactivity")
-                        _unload_model()
+
+                    # Cancel any pending tasks
+                    for task in pending:
+                        task.cancel()
+                        try:
+                            await task
+                        except asyncio.CancelledError:
+                            pass
+
+                    # Check what completed
+                    if _shutdown_requested.is_set():
+                        logger.info(
+                            "Model unloader background task shutting down during timeout"
+                        )
+                        break
+                    elif _unload_requested.is_set():
+                        # New unload request received during timeout, immediately check condition
+                        _unload_requested.clear()
+                        model_name, last_used_time = get_cache_state()
+                        if (
+                            get_current_time() - last_used_time >= MODEL_IDLE_TIMEOUT
+                            and model_name is not None
+                        ):
+                            logger.info(
+                                f"Unloading model '{model_name}' due to inactivity (immediate check)"
+                            )
+                            cache._unload_model()
+                        # Continue the loop to start a new timeout period
+                        continue
+                    else:
+                        # Timeout expired, check if we should unload
+                        model_name, last_used_time = get_cache_state()
+                        if (
+                            get_current_time() - last_used_time >= MODEL_IDLE_TIMEOUT
+                            and model_name is not None
+                        ):
+                            logger.info(
+                                f"Unloading model '{model_name}' due to inactivity"
+                            )
+                            cache._unload_model()
+
+                except Exception as timeout_error:
+                    logger.error(f"Error during timeout wait: {timeout_error}")
+                    await asyncio.sleep(1)
 
         except Exception as e:
             logger.error(f"Error in model unloader background task: {e}")
