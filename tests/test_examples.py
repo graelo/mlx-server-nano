@@ -319,33 +319,22 @@ def test_example_using_custom_fixture(example_complex_tool):
 
 # Example of parametrized test
 @pytest.mark.parametrize(
-    "model_name,expected_stop_strings",
+    "model_name",
     [
-        ("qwen-chat", True),
-        ("devstral-model", False),  # Modern Mistral models use clean tool calling
-        ("gpt-4", False),
+        "qwen-chat",
+        "devstral-model",
+        "gpt-4",
     ],
 )
-def test_example_parametrized(model_name, expected_stop_strings):
-    """Example: Parametrized test for different template configurations."""
-    from mlx_server_nano.model_manager import (
-        _setup_generation_kwargs,
-        _get_stop_sequences,
-    )
+def test_example_parametrized(model_name):
+    """Example: Parametrized test showing that MLX-LM handles stop sequences automatically."""
+    from mlx_server_nano.model_manager import _setup_generation_kwargs
 
     kwargs = _setup_generation_kwargs(model_name)
 
-    # Template manager should provide stop sequences for models with configured templates
-    stop_sequences = _get_stop_sequences(model_name)
-
-    # generation_kwargs no longer contains stop_strings
+    # generation_kwargs should never contain stop_strings since MLX-LM handles them automatically
     assert "stop_strings" not in kwargs
-
-    # Check stop sequences separately
-    if expected_stop_strings:
-        assert len(stop_sequences) > 0
-    else:
-        assert len(stop_sequences) == 0
+    assert "max_tokens" in kwargs
 
 
 # Example test class with setup/teardown

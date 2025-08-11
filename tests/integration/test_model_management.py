@@ -439,27 +439,18 @@ class TestModelConfigurationIntegration:
         mock_tokenizer = MagicMock()
         mock_load.return_value = (mock_model, mock_tokenizer)
 
-        # Test Qwen model configuration
-        from mlx_server_nano.model_manager import (
-            _setup_generation_kwargs,
-            _get_stop_sequences,
-        )
+        # Test model configuration
+        from mlx_server_nano.model_manager import _setup_generation_kwargs
 
         qwen_kwargs = _setup_generation_kwargs("qwen-test-model", max_tokens=100)
         assert qwen_kwargs["max_tokens"] == 100
-
-        # Test stop sequences are properly configured for Qwen models using template manager
-        qwen_stop_sequences = _get_stop_sequences("qwen-test-model")
-        assert len(qwen_stop_sequences) > 0
-        assert any("im_end" in stop for stop in qwen_stop_sequences)
+        # Ensure no stop_strings in generation kwargs (MLX-LM handles them automatically)
+        assert "stop_strings" not in qwen_kwargs
 
         # Test non-Qwen model
         other_kwargs = _setup_generation_kwargs("gpt-4", max_tokens=200)
         assert other_kwargs["max_tokens"] == 200
-
-        # Test model with no template configuration has no default stop sequences
-        other_stop_sequences = _get_stop_sequences("gpt-4")
-        assert len(other_stop_sequences) == 0
+        assert "stop_strings" not in other_kwargs
 
     def test_environment_variable_integration(self, test_env_vars):
         """Test that environment variables are properly integrated."""

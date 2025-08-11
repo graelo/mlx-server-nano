@@ -27,7 +27,6 @@ from .background_tasks import (
 )
 from .tool_calling import parse_tool_calls, has_tool_calls
 from .cache import load_model, get_current_time, _unload_model, MODEL_IDLE_TIMEOUT
-from .stop_sequences import _get_stop_sequences
 
 # Import submodules for direct access in tests
 from . import cache, background_tasks
@@ -49,7 +48,6 @@ __all__ = [
     "_unload_model",
     "_schedule_unload",
     "_setup_generation_kwargs",
-    "_get_stop_sequences",
     "_try_generate_with_fallback",
     "MODEL_IDLE_TIMEOUT",
     # Expose submodules for direct access in tests

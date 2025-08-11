@@ -19,7 +19,6 @@ from mlx_server_nano.model_manager import (
     generate_response_with_tools,
     generate_response_stream,
     _setup_generation_kwargs,
-    _get_stop_sequences,
     _try_generate_with_fallback,
 )
 
@@ -235,54 +234,15 @@ class TestSetupGenerationKwargs:
 
         assert kwargs["max_tokens"] == 200
 
-    def test_setup_generation_kwargs_qwen_stop_strings(self):
-        """Test that qwen3 template gets special stop strings."""
-        kwargs = _setup_generation_kwargs("qwen-model")
+    def test_setup_generation_kwargs_no_stop_strings(self):
+        """Test that generation kwargs don't contain stop_strings (MLX-LM handles them automatically)."""
+        # Test various model types
+        for model_name in ["qwen-model", "gpt-4", "devstral-model"]:
+            kwargs = _setup_generation_kwargs(model_name)
 
-        # Template manager should provide stop sequences for qwen models
-        stop_sequences = _get_stop_sequences("qwen-model")
-
-        # generation_kwargs no longer contains stop_strings
-        assert "stop_strings" not in kwargs
-
-        # But stop sequences are properly configured for qwen3 template
-        assert len(stop_sequences) > 0
-        assert "✿RESULT✿:" in stop_sequences
-        assert "✿RETURN✿:" in stop_sequences
-        assert "<|im_end|>" in stop_sequences
-
-    def test_setup_generation_kwargs_non_qwen_no_stop_strings(self):
-        """Test that models without template configuration don't get stop strings."""
-        kwargs = _setup_generation_kwargs("gpt-4")
-
-        # Models without template configuration should have no stop sequences
-        stop_sequences = _get_stop_sequences("gpt-4")
-
-        assert "stop_strings" not in kwargs
-        assert len(stop_sequences) == 0
-
-    def test_setup_generation_kwargs_devstral_stop_strings(self):
-        """Test that devstral template gets special stop strings."""
-        kwargs = _setup_generation_kwargs("devstral-model")
-
-        # Template manager should provide stop sequences for devstral models
-        stop_sequences = _get_stop_sequences("devstral-model")
-
-        # generation_kwargs no longer contains stop_strings
-        assert "stop_strings" not in kwargs
-
-        # Modern Devstral models use clean tool calling format - no stop sequences needed
-        assert len(stop_sequences) == 0
-
-    def test_setup_generation_kwargs_stop_param_override(self):
-        """Test that stop parameter overrides template defaults."""
-        # Test with string stop parameter
-        stop_sequences = _get_stop_sequences("qwen-model", "custom_stop")
-        assert stop_sequences == ["custom_stop"]
-
-        # Test with list stop parameter
-        stop_sequences = _get_stop_sequences("qwen-model", ["stop1", "stop2"])
-        assert stop_sequences == ["stop1", "stop2"]
+            # generation_kwargs should never contain stop_strings since MLX-LM handles them
+            assert "stop_strings" not in kwargs
+            assert "max_tokens" in kwargs
 
 
 @pytest.mark.unit

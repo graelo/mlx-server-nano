@@ -9,7 +9,7 @@ Features:
 - Tool call detection and parsing integration
 - Generation parameter setup and validation
 - Fallback generation methods for compatibility
-- Stop sequence handling during generation
+- MLX-LM handles stop sequences automatically
 """
 
 import logging
@@ -21,7 +21,6 @@ from ..config import config
 from ..schemas import Tool, ToolCall
 from .cache import load_model, update_last_used_time
 from .message_formatting import format_messages_for_generation
-from .stop_sequences import _get_stop_sequences, _check_stop_sequences
 from .tool_calling import parse_tool_calls, _contains_tool_calls
 
 # Set up logging
@@ -48,9 +47,6 @@ def _setup_generation_kwargs(model_name: str, **kwargs) -> dict:
     # if temperature is not None:
     #     generation_kwargs["temperature"] = temperature
     #     logger.debug(f"Using temperature: {temperature}")
-
-    # Note: stop_strings handling moved to manual detection in generation functions
-    # since some MLX versions don't support stop_strings parameter
 
     return generation_kwargs
 
@@ -131,11 +127,9 @@ def generate_response_with_tools(
         logger.error(f"Failed to format messages: {e}", exc_info=True)
         raise
 
-    # Setup generation parameters (without stop_strings)
+    # Setup generation parameters
     generation_kwargs = _setup_generation_kwargs(model_name, **kwargs)
     logger.info(f"Generation parameters: {generation_kwargs}")
-
-    # Note: Stop sequences will be handled after generation for non-streaming
 
     # Generate text response
     try:
@@ -215,12 +209,9 @@ def generate_response_stream(
         logger.error(f"Failed to format messages: {e}", exc_info=True)
         raise
 
-    # Setup generation parameters (without stop_strings)
+    # Setup generation parameters
     generation_kwargs = _setup_generation_kwargs(model_name, **kwargs)
     logger.info(f"Streaming generation parameters: {generation_kwargs}")
-
-    # Get stop sequences for manual detection
-    stop_sequences = _get_stop_sequences(model_name, stop)
 
     try:
         logger.debug("Starting streaming text generation with stream_generate")
@@ -234,49 +225,6 @@ def generate_response_stream(
             full_response += chunk_text
             last_chunk = chunk
 
-            # Check for stop sequences after each chunk
-            if stop_sequences:
-                found_stop = _check_stop_sequences(full_response, stop_sequences)
-                if found_stop:
-                    # Stop sequence found - determine finish reason
-                    logger.debug(f"Stop sequence '{found_stop}' found in response")
-                    logger.debug(f"Full response so far: {repr(full_response)}")
-
-                    # First check if the response contains actual tool calls
-                    if _contains_tool_calls(full_response, model_name, tools):
-                        finish_reason = "tool_calls"
-                        logger.info(
-                            f"Generation stopped due to tool calls detected in response (stop sequence: {found_stop})"
-                        )
-                    # Then check if stop sequence itself is tool-related
-                    elif any(
-                        tool_indicator in found_stop.lower()
-                        for tool_indicator in [
-                            "tool",
-                            "function",
-                            "[/tool",
-                            "tool_call",
-                            "b_inst",
-                        ]
-                    ):
-                        finish_reason = "tool_calls"
-                        logger.info(
-                            f"Generation stopped due to tool-related stop sequence: {found_stop}"
-                        )
-                    else:
-                        finish_reason = "stop"
-                        logger.info(
-                            f"Generation stopped due to stop sequence: {found_stop}"
-                        )
-
-                    # Yield the chunk before the stop sequence
-                    if chunk_text:
-                        yield chunk_text, None
-
-                    # Yield final indication with finish reason
-                    yield "", finish_reason
-                    return
-
             yield chunk_text, None  # None indicates this is not the final chunk
 
         # Determine finish reason based on the final state
@@ -287,7 +235,7 @@ def generate_response_stream(
             if last_chunk.finish_reason == "length":
                 finish_reason = "length"
 
-        # Check if the final response contains tool calls (even if no stop sequence was hit)
+        # Check if the final response contains tool calls
         if _contains_tool_calls(full_response, model_name, tools):
             finish_reason = "tool_calls"
             logger.info(
