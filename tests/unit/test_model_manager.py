@@ -12,7 +12,7 @@ from mlx_server_nano import model_manager
 from mlx_server_nano.model_manager import (
     load_model,
     get_current_time,
-    _unload_model,
+    unload_model,
     _schedule_unload,
     start_model_unloader,
     stop_model_unloader,
@@ -52,7 +52,7 @@ class TestUnloadModel:
         model_manager.cache._model_name = None
 
         # Should not raise any errors
-        _unload_model()
+        unload_model()
 
         assert model_manager.cache._loaded_model is None
         assert model_manager.cache._model_name is None
@@ -73,7 +73,7 @@ class TestUnloadModel:
         mock_gc_collect.return_value = 5  # Simulate collected objects
 
         # Unload model
-        _unload_model()
+        unload_model()
 
         # Verify state is cleared
         assert model_manager.cache._loaded_model is None
@@ -96,7 +96,7 @@ class TestUnloadModel:
         mock_clear_cache.side_effect = Exception("Cache clear failed")
 
         # Should not raise, just log warning
-        _unload_model()
+        unload_model()
 
         # Model should still be unloaded
         assert model_manager.cache._loaded_model is None

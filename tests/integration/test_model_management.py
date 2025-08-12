@@ -97,7 +97,7 @@ class TestModelUnloaderIntegration:
         unload_completed = asyncio.Event()
 
         # Patch _unload_model to signal completion
-        original_unload = model_manager.cache._unload_model
+        original_unload = model_manager.cache.unload_model
 
         def synchronized_unload():
             result = original_unload()
@@ -320,7 +320,7 @@ class TestMemoryManagement:
         assert model_manager.cache._loaded_model is not None
 
         # Manually trigger unload (normally done by background task)
-        model_manager.cache._unload_model()
+        model_manager.cache.unload_model()
 
         # Verify state is cleared
         assert model_manager.cache._loaded_model is None

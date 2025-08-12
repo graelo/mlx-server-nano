@@ -152,7 +152,7 @@ class TestExampleMemoryTests:
         load_model("test-model")
         assert model_manager.cache._loaded_model is not None
 
-        model_manager.cache._unload_model()
+        model_manager.cache.unload_model()
 
         # Assert: Verify functional cleanup
         assert model_manager.cache._loaded_model is None

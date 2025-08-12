@@ -17,6 +17,8 @@ Key Functions:
 from .generation import (
     generate_response_with_tools,
     generate_response_stream,
+    generate_response_with_tools_cached,
+    generate_response_stream_cached,
     _setup_generation_kwargs,
     _try_generate_with_fallback,
 )
@@ -26,7 +28,13 @@ from .background_tasks import (
     _schedule_unload,
 )
 from .tool_calling import parse_tool_calls, has_tool_calls
-from .cache import load_model, get_current_time, _unload_model, MODEL_IDLE_TIMEOUT
+from .cache import (
+    load_model,
+    get_current_time,
+    unload_model,
+    MODEL_IDLE_TIMEOUT,
+    get_conversation_cache_stats,
+)
 
 # Import submodules for direct access in tests
 from . import cache, background_tasks
@@ -39,13 +47,16 @@ from mlx_lm.generate import generate, stream_generate
 __all__ = [
     "generate_response_with_tools",
     "generate_response_stream",
+    "generate_response_with_tools_cached",
+    "generate_response_stream_cached",
     "start_model_unloader",
     "stop_model_unloader",
     "parse_tool_calls",
     "has_tool_calls",
     "load_model",
     "get_current_time",
-    "_unload_model",
+    "unload_model",
+    "get_conversation_cache_stats",
     "_schedule_unload",
     "_setup_generation_kwargs",
     "_try_generate_with_fallback",

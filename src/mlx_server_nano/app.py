@@ -15,6 +15,9 @@ import json
 from .model_manager import (
     generate_response_with_tools,
     generate_response_stream,
+    generate_response_with_tools_cached,
+    generate_response_stream_cached,
+    get_conversation_cache_stats,
     start_model_unloader,
     stop_model_unloader,
 )
@@ -47,16 +50,18 @@ def create_streaming_response(
     max_tokens: int | None,
     temperature: float | None,
     stop: str | list[str] | None,
+    conversation_id: str | None = None,  # Add conversation_id parameter
 ) -> Callable[[], Generator[str, None, None]]:
     def generate() -> Generator[str, None, None]:
         logger.debug("Starting streaming generation")
         try:
             completion_id = f"chatcmpl-{uuid.uuid4().hex[:8]}"
             created_time = int(time.time())
-            stream_generator = generate_response_stream(
+            stream_generator = generate_response_stream_cached(
                 model_name=model_name,
                 messages=messages,
                 tools=tools,
+                conversation_id=conversation_id,
                 max_tokens=max_tokens,
                 temperature=temperature,
                 stop=stop,
@@ -259,6 +264,7 @@ def chat_completion(body: ChatCompletionRequest) -> object:
             max_tokens=body.max_tokens,
             temperature=body.temperature,
             stop=body.stop,
+            conversation_id=body.user,
         )
         logger.info("Created streaming generator, returning StreamingResponse")
         return StreamingResponse(
@@ -268,10 +274,11 @@ def chat_completion(body: ChatCompletionRequest) -> object:
         )
     logger.info("Processing non-streaming request")
     try:
-        content, tool_calls = generate_response_with_tools(
+        content, tool_calls = generate_response_with_tools_cached(
             model_name=body.model,
             messages=body.messages,
             tools=body.tools,
+            conversation_id=body.user,
             max_tokens=body.max_tokens,
             temperature=body.temperature,
             stop=body.stop,
@@ -317,3 +324,18 @@ def list_models() -> dict[str, object]:
 @app.get("/health")
 def health_check() -> dict[str, str]:
     return {"status": "healthy"}
+
+
+@app.get("/admin/cache/stats")
+def get_cache_statistics() -> dict[str, int | float | bool]:
+    """Get conversation cache statistics."""
+    logger.info("Cache statistics requested")
+    try:
+        stats = get_conversation_cache_stats()
+        logger.debug(f"Cache stats: {stats}")
+        return stats
+    except Exception as e:
+        logger.error(f"Failed to get cache statistics: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500, detail=f"Failed to get cache statistics: {str(e)}"
+        )

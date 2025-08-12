@@ -95,7 +95,7 @@ async def _model_unloader_background_task() -> None:
                             logger.info(
                                 f"Unloading model '{model_name}' due to inactivity (immediate check)"
                             )
-                            cache._unload_model()
+                            cache.unload_model()
                         # Continue the loop to start a new timeout period
                         continue
                     else:
@@ -108,7 +108,7 @@ async def _model_unloader_background_task() -> None:
                             logger.info(
                                 f"Unloading model '{model_name}' due to inactivity"
                             )
-                            cache._unload_model()
+                            cache.unload_model()
 
                 except Exception as timeout_error:
                     logger.error(f"Error during timeout wait: {timeout_error}")

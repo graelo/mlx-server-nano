@@ -13,7 +13,7 @@ from unittest.mock import patch, MagicMock
 from mlx_server_nano import model_manager
 from mlx_server_nano.model_manager import (
     load_model,
-    _unload_model,
+    unload_model,
     start_model_unloader,
     stop_model_unloader,
 )
@@ -64,7 +64,7 @@ class TestFunctionalMemoryManagement:
         assert model_manager.cache._model_name == "test-model"
 
         # Unload model
-        _unload_model()
+        unload_model()
 
         # Verify cache is cleared
         assert model_manager.cache._loaded_model is None
@@ -135,7 +135,7 @@ class TestMemoryLifecycleIntegration:
         unload_completed = asyncio.Event()
 
         # Patch _unload_model to signal completion
-        original_unload = model_manager.cache._unload_model
+        original_unload = model_manager.cache.unload_model
 
         def synchronized_unload():
             result = original_unload()
@@ -237,7 +237,7 @@ class TestMemoryCleanupVerification:
         mock_gc.return_value = 10  # Just return a fixed value
 
         # Unload model
-        _unload_model()
+        unload_model()
 
         # Verify cleanup was called
         mock_clear_cache.assert_called_once()
@@ -258,7 +258,7 @@ class TestMemoryCleanupVerification:
         mock_clear_cache.side_effect = Exception("Cache clear failed")
 
         # Unload should not raise, just log warning
-        _unload_model()
+        unload_model()
 
         # Model should still be unloaded despite error
         assert model_manager.cache._loaded_model is None
@@ -361,7 +361,7 @@ class TestMemoryMonitoringIntegration:
         assert model_manager.cache._loaded_model == (mock_model, mock_tokenizer)
 
         # Unload model
-        _unload_model()
+        unload_model()
 
         # Force garbage collection
         gc.collect()
