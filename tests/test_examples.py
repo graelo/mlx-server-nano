@@ -14,6 +14,7 @@ from mlx_server_nano.model_manager import (
     generate_response_with_tools,
     parse_tool_calls,
 )
+from mlx_server_nano.model_manager.cache_manager import model_cache
 from mlx_server_nano.schemas import Tool, Function
 
 
@@ -150,13 +151,13 @@ class TestExampleMemoryTests:
 
         # Act: Load then unload model
         load_model("test-model")
-        assert model_manager.cache._loaded_model is not None
+        assert model_cache._loaded_model is not None
 
         model_manager.cache.unload_model()
 
         # Assert: Verify functional cleanup
-        assert model_manager.cache._loaded_model is None
-        assert model_manager.cache._model_name is None
+        assert model_cache._loaded_model is None
+        assert model_cache._model_name is None
         mock_clear_cache.assert_called_once()
         assert mock_gc.call_count >= 1
 
@@ -236,7 +237,7 @@ class TestExampleSlowTests:
             )
 
             # Simulate model usage
-            model_manager.cache._last_used_time = 1000  # Old timestamp
+            model_cache._last_used_time = 1000  # Old timestamp
             model_manager.background_tasks._unload_requested.set()
 
             # Give the background task a brief moment to process the event

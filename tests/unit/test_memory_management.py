@@ -11,6 +11,7 @@ import gc
 from unittest.mock import patch, MagicMock
 
 from mlx_server_nano import model_manager
+from mlx_server_nano.model_manager.cache_manager import model_cache
 from mlx_server_nano.model_manager import (
     load_model,
     unload_model,
@@ -33,16 +34,16 @@ class TestFunctionalMemoryManagement:
         mock_load.return_value = (mock_model, mock_tokenizer)
 
         # Initially no model should be cached
-        assert model_manager.cache._loaded_model is None
-        assert model_manager.cache._model_name is None
+        assert model_cache._loaded_model is None
+        assert model_cache._model_name is None
 
         # Load model
         result = load_model("test-model")
 
         # Verify cache state
-        assert model_manager.cache._loaded_model is not None
-        assert model_manager.cache._model_name == "test-model"
-        assert model_manager.cache._loaded_model == (mock_model, mock_tokenizer)
+        assert model_cache._loaded_model is not None
+        assert model_cache._model_name == "test-model"
+        assert model_cache._loaded_model == (mock_model, mock_tokenizer)
         assert result == (mock_model, mock_tokenizer)
 
     @patch("mlx_server_nano.model_manager.load")
@@ -60,15 +61,15 @@ class TestFunctionalMemoryManagement:
 
         # Load model
         load_model("test-model")
-        assert model_manager.cache._loaded_model is not None
-        assert model_manager.cache._model_name == "test-model"
+        assert model_cache._loaded_model is not None
+        assert model_cache._model_name == "test-model"
 
         # Unload model
         unload_model()
 
         # Verify cache is cleared
-        assert model_manager.cache._loaded_model is None
-        assert model_manager.cache._model_name is None
+        assert model_cache._loaded_model is None
+        assert model_cache._model_name is None
 
         # Verify cleanup functions were called
         mock_clear_cache.assert_called_once()
@@ -84,16 +85,16 @@ class TestFunctionalMemoryManagement:
 
         # Load first model
         load_model("model-1")
-        assert model_manager.cache._model_name == "model-1"
-        assert model_manager.cache._loaded_model == (model1, tokenizer1)
+        assert model_cache._model_name == "model-1"
+        assert model_cache._loaded_model == (model1, tokenizer1)
 
         # Load second model
         load_model("model-2")
-        assert model_manager.cache._model_name == "model-2"
-        assert model_manager.cache._loaded_model == (model2, tokenizer2)
+        assert model_cache._model_name == "model-2"
+        assert model_cache._loaded_model == (model2, tokenizer2)
 
         # First model should be replaced
-        assert model_manager.cache._loaded_model != (model1, tokenizer1)
+        assert model_cache._loaded_model != (model1, tokenizer1)
 
     @patch("mlx_server_nano.model_manager.load")
     def test_model_cache_reuse(self, mock_load, clean_model_manager):
@@ -157,12 +158,12 @@ class TestMemoryLifecycleIntegration:
             try:
                 # Load model
                 load_model("test-model")
-                assert model_manager.cache._loaded_model is not None
+                assert model_cache._loaded_model is not None
 
                 # Simulate that the model was loaded long ago by setting an old timestamp
                 # This ensures the unload condition will be met after the timeout
                 old_time = model_manager.get_current_time() - (test_timeout + 1)
-                model_manager.cache._last_used_time = old_time
+                model_cache._last_used_time = old_time
 
                 # Wait for actual unload completion (with timeout)
                 await asyncio.wait_for(
@@ -170,8 +171,8 @@ class TestMemoryLifecycleIntegration:
                 )
 
                 # Model should be unloaded
-                assert model_manager.cache._loaded_model is None
-                assert model_manager.cache._model_name is None
+                assert model_cache._loaded_model is None
+                assert model_cache._model_name is None
 
             finally:
                 await stop_model_unloader()
@@ -200,8 +201,8 @@ class TestMemoryLifecycleIntegration:
             assert all(r == first_result for r in successful_results)
 
         # Cache should be consistent
-        assert model_manager.cache._loaded_model is not None
-        assert model_manager.cache._model_name == "test-model"
+        assert model_cache._loaded_model is not None
+        assert model_cache._model_name == "test-model"
 
     @patch("mlx_server_nano.model_manager.load")
     def test_memory_cleanup_error_handling(self, mock_load, clean_model_manager):
@@ -214,8 +215,8 @@ class TestMemoryLifecycleIntegration:
             load_model("failing-model")
 
         # Cache should remain clean
-        assert model_manager.cache._loaded_model is None
-        assert model_manager.cache._model_name is None
+        assert model_cache._loaded_model is None
+        assert model_cache._model_name is None
 
 
 @pytest.mark.memory
@@ -230,8 +231,8 @@ class TestMemoryCleanupVerification:
     ):
         """Test that garbage collection is properly triggered during unload."""
         # Set up a loaded model
-        model_manager.cache._loaded_model = (MagicMock(), MagicMock())
-        model_manager.cache._model_name = "test-model"
+        model_cache._loaded_model = (MagicMock(), MagicMock())
+        model_cache._model_name = "test-model"
 
         # Configure gc mock to return different values for multiple calls
         mock_gc.return_value = 10  # Just return a fixed value
@@ -251,8 +252,8 @@ class TestMemoryCleanupVerification:
     ):
         """Test handling of MLX cache clear errors."""
         # Set up a loaded model
-        model_manager.cache._loaded_model = (MagicMock(), MagicMock())
-        model_manager.cache._model_name = "test-model"
+        model_cache._loaded_model = (MagicMock(), MagicMock())
+        model_cache._model_name = "test-model"
 
         # Make clear_cache raise an error
         mock_clear_cache.side_effect = Exception("Cache clear failed")
@@ -261,8 +262,8 @@ class TestMemoryCleanupVerification:
         unload_model()
 
         # Model should still be unloaded despite error
-        assert model_manager.cache._loaded_model is None
-        assert model_manager.cache._model_name is None
+        assert model_cache._loaded_model is None
+        assert model_cache._model_name is None
 
     @patch("mlx_server_nano.model_manager.load")
     @patch("mlx.core.clear_cache")
@@ -283,20 +284,20 @@ class TestMemoryCleanupVerification:
 
         # Load and switch between models
         load_model("model-1")
-        assert model_manager.cache._model_name == "model-1"
+        assert model_cache._model_name == "model-1"
 
         load_model("model-2")  # This should unload model-1
-        assert model_manager.cache._model_name == "model-2"
+        assert model_cache._model_name == "model-2"
 
         load_model("model-3")  # This should unload model-2
-        assert model_manager.cache._model_name == "model-3"
+        assert model_cache._model_name == "model-3"
 
         # Each model switch should trigger cleanup
         # (Note: actual cleanup happens in _unload_model, which is called
         # when a different model is loaded)
 
         # Final state should be model-3
-        assert model_manager.cache._loaded_model == (model3, tokenizer3)
+        assert model_cache._loaded_model == (model3, tokenizer3)
 
 
 @pytest.mark.memory
@@ -347,18 +348,18 @@ class TestMemoryMonitoringIntegration:
         # requiring actual memory measurement
 
         # Initially no model cached
-        assert model_manager.cache._loaded_model is None
+        assert model_cache._loaded_model is None
 
         # Simulate model loading
         mock_model = MagicMock()
         mock_tokenizer = MagicMock()
-        model_manager.cache._loaded_model = (mock_model, mock_tokenizer)
-        model_manager.cache._model_name = "test-model"
+        model_cache._loaded_model = (mock_model, mock_tokenizer)
+        model_cache._model_name = "test-model"
 
         # Verify model is loaded (functional state verification)
-        assert model_manager.cache._loaded_model is not None
-        assert model_manager.cache._model_name == "test-model"
-        assert model_manager.cache._loaded_model == (mock_model, mock_tokenizer)
+        assert model_cache._loaded_model is not None
+        assert model_cache._model_name == "test-model"
+        assert model_cache._loaded_model == (mock_model, mock_tokenizer)
 
         # Unload model
         unload_model()
@@ -367,8 +368,8 @@ class TestMemoryMonitoringIntegration:
         gc.collect()
 
         # Verify functional unloading
-        assert model_manager.cache._loaded_model is None
-        assert model_manager.cache._model_name is None
+        assert model_cache._loaded_model is None
+        assert model_cache._model_name is None
 
         # The important thing is functional state verification, not object counting
         # Object count changes are unreliable due to garbage collection timing

@@ -28,16 +28,16 @@ from .background_tasks import (
     _schedule_unload,
 )
 from .tool_calling import parse_tool_calls, has_tool_calls
-from .cache import (
+from .cache_manager import (
     load_model,
     get_current_time,
     unload_model,
-    MODEL_IDLE_TIMEOUT,
     get_conversation_cache_stats,
 )
+from .cache_manager.model_cache import MODEL_IDLE_TIMEOUT
 
 # Import submodules for direct access in tests
-from . import cache, background_tasks
+from . import cache_manager as cache, background_tasks
 
 # Import mlx_lm functions for test mocking compatibility
 from mlx_lm.utils import load

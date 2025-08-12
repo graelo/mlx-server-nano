@@ -78,10 +78,13 @@ def client():
 @pytest.fixture
 async def clean_model_manager():
     """Clean model manager state before and after tests with proper async cleanup."""
+    # Import the actual cache module where the state lives
+    from mlx_server_nano.model_manager.cache_manager import model_cache
+
     # Save original state
-    original_model = model_manager.cache._loaded_model
-    original_name = model_manager.cache._model_name
-    original_last_used = model_manager.cache._last_used_time
+    original_model = model_cache._loaded_model
+    original_name = model_cache._model_name
+    original_last_used = model_cache._last_used_time
     original_events = (
         model_manager.background_tasks._unload_requested,
         model_manager.background_tasks._shutdown_requested,
@@ -93,10 +96,10 @@ async def clean_model_manager():
     model_manager.background_tasks._shutdown_requested = asyncio.Event()
     model_manager.background_tasks._model_unloader_task = None
 
-    # Clean model state
-    model_manager.cache._loaded_model = None
-    model_manager.cache._model_name = None
-    model_manager.cache._last_used_time = 0
+    # Clean model state - set in the actual module
+    model_cache._loaded_model = None
+    model_cache._model_name = None
+    model_cache._last_used_time = 0
 
     yield
 
@@ -118,10 +121,10 @@ async def clean_model_manager():
                 except asyncio.CancelledError:
                     pass
 
-    # Restore original state (best effort)
-    model_manager.cache._loaded_model = original_model
-    model_manager.cache._model_name = original_name
-    model_manager.cache._last_used_time = original_last_used
+    # Restore original state (best effort) - restore in the actual module
+    model_cache._loaded_model = original_model
+    model_cache._model_name = original_name
+    model_cache._last_used_time = original_last_used
     (
         model_manager.background_tasks._unload_requested,
         model_manager.background_tasks._shutdown_requested,

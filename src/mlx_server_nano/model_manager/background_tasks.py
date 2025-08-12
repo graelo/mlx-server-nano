@@ -15,8 +15,9 @@ import asyncio
 import logging
 from typing import Optional
 
-from .cache import MODEL_IDLE_TIMEOUT, get_cache_state, get_current_time
-from . import cache
+from .cache_manager import get_cache_state, get_current_time
+from .cache_manager.model_cache import MODEL_IDLE_TIMEOUT
+from . import cache_manager as cache
 
 # Set up logging
 logger = logging.getLogger(__name__)

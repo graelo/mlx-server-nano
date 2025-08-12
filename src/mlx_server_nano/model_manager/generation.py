@@ -19,7 +19,11 @@ from mlx_lm.generate import generate, stream_generate
 
 from ..config import config
 from ..schemas import Tool, ToolCall, Message
-from .cache import load_model, update_last_used_time, get_or_create_conversation_state
+from .cache_manager import (
+    load_model,
+    update_last_used_time,
+    get_or_create_conversation_state,
+)
 from .message_formatting import format_messages_for_generation
 from .tool_calling import parse_tool_calls, _contains_tool_calls
 

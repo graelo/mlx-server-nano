@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, patch
 import time
 
 from mlx_server_nano import model_manager
+from mlx_server_nano.model_manager.cache_manager import model_cache
 from mlx_server_nano.model_manager import (
     load_model,
     get_current_time,
@@ -48,14 +49,14 @@ class TestUnloadModel:
     def test_unload_model_when_no_model_loaded(self, clean_model_manager):
         """Test unloading when no model is loaded."""
         # Ensure no model is loaded
-        model_manager.cache._loaded_model = None
-        model_manager.cache._model_name = None
+        model_cache._loaded_model = None
+        model_cache._model_name = None
 
         # Should not raise any errors
         unload_model()
 
-        assert model_manager.cache._loaded_model is None
-        assert model_manager.cache._model_name is None
+        assert model_cache._loaded_model is None
+        assert model_cache._model_name is None
 
     @patch("mlx.core.clear_cache")
     @patch("gc.collect")
@@ -66,8 +67,8 @@ class TestUnloadModel:
         # Set up loaded model
         mock_model = MagicMock()
         mock_tokenizer = MagicMock()
-        model_manager.cache._loaded_model = (mock_model, mock_tokenizer)
-        model_manager.cache._model_name = "test-model"
+        model_cache._loaded_model = (mock_model, mock_tokenizer)
+        model_cache._model_name = "test-model"
 
         # Configure mocks
         mock_gc_collect.return_value = 5  # Simulate collected objects
@@ -76,8 +77,8 @@ class TestUnloadModel:
         unload_model()
 
         # Verify state is cleared
-        assert model_manager.cache._loaded_model is None
-        assert model_manager.cache._model_name is None
+        assert model_cache._loaded_model is None
+        assert model_cache._model_name is None
 
         # Verify cleanup was called
         mock_clear_cache.assert_called_once()
@@ -89,8 +90,8 @@ class TestUnloadModel:
     ):
         """Test handling of clear_cache errors."""
         # Set up loaded model
-        model_manager.cache._loaded_model = (MagicMock(), MagicMock())
-        model_manager.cache._model_name = "test-model"
+        model_cache._loaded_model = (MagicMock(), MagicMock())
+        model_cache._model_name = "test-model"
 
         # Make clear_cache raise an error
         mock_clear_cache.side_effect = Exception("Cache clear failed")
@@ -99,8 +100,8 @@ class TestUnloadModel:
         unload_model()
 
         # Model should still be unloaded
-        assert model_manager.cache._loaded_model is None
-        assert model_manager.cache._model_name is None
+        assert model_cache._loaded_model is None
+        assert model_cache._model_name is None
 
 
 @pytest.mark.unit
@@ -148,9 +149,9 @@ class TestLoadModel:
 
         # Verify result
         assert result == (mock_model, mock_tokenizer)
-        assert model_manager.cache._loaded_model == (mock_model, mock_tokenizer)
-        assert model_manager.cache._model_name == "test-model"
-        assert model_manager.cache._last_used_time > 0
+        assert model_cache._loaded_model == (mock_model, mock_tokenizer)
+        assert model_cache._model_name == "test-model"
+        assert model_cache._last_used_time > 0
 
         # Verify mlx_lm.load was called
         mock_load.assert_called_once_with("test-model")
@@ -192,11 +193,11 @@ class TestLoadModel:
 
         # Load first model
         result1 = load_model("model-1")
-        assert model_manager.cache._model_name == "model-1"
+        assert model_cache._model_name == "model-1"
 
         # Load different model
         result2 = load_model("model-2")
-        assert model_manager.cache._model_name == "model-2"
+        assert model_cache._model_name == "model-2"
         assert result1 != result2
 
         # Both calls should go to mlx_lm.load
@@ -213,8 +214,8 @@ class TestLoadModel:
             load_model("failing-model")
 
         # Model state should remain clean
-        assert model_manager.cache._loaded_model is None
-        assert model_manager.cache._model_name is None
+        assert model_cache._loaded_model is None
+        assert model_cache._model_name is None
 
 
 @pytest.mark.unit
