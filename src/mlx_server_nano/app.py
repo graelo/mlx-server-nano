@@ -47,6 +47,7 @@ def create_streaming_response(
     tools: list[Tool] | None,
     max_tokens: int | None,
     temperature: float | None,
+    top_p: float | None,
     stop: str | list[str] | None,
     conversation_id: str | None = None,  # Add conversation_id parameter
 ) -> Callable[[], Generator[str, None, None]]:
@@ -62,6 +63,7 @@ def create_streaming_response(
                 conversation_id=conversation_id,
                 max_tokens=max_tokens,
                 temperature=temperature,
+                top_p=top_p,
                 stop=stop,
             )
             chunk_count = 0
@@ -261,6 +263,7 @@ def chat_completion(body: ChatCompletionRequest) -> object:
             tools=body.tools,
             max_tokens=body.max_tokens,
             temperature=body.temperature,
+            top_p=body.top_p,
             stop=body.stop,
             conversation_id=body.user,
         )
@@ -279,6 +282,7 @@ def chat_completion(body: ChatCompletionRequest) -> object:
             conversation_id=body.user,
             max_tokens=body.max_tokens,
             temperature=body.temperature,
+            top_p=body.top_p,
             stop=body.stop,
         )
         logger.info(

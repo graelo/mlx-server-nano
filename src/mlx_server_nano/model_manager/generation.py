@@ -42,11 +42,22 @@ def _setup_generation_kwargs(model_name: str, **kwargs) -> dict:
         "max_tokens": kwargs.get("max_tokens", config.default_max_tokens),
     }
 
-    # Handle temperature parameter (temporarily disabled due to MLX-LM compatibility)
-    # temperature = kwargs.get("temperature")
-    # if temperature is not None:
-    #     generation_kwargs["temperature"] = temperature
-    #     logger.debug(f"Using temperature: {temperature}")
+    # Handle sampling parameters (temperature, top_p) via MLX-LM sampler
+    temperature = kwargs.get("temperature")
+    top_p = kwargs.get("top_p")
+
+    # Only create a sampler if we have sampling parameters
+    if temperature is not None or top_p is not None:
+        from mlx_lm.sample_utils import make_sampler
+
+        # Set defaults for unspecified parameters
+        temp_value = temperature if temperature is not None else 0.0
+        top_p_value = top_p if top_p is not None else 0.0
+
+        sampler = make_sampler(temp=temp_value, top_p=top_p_value)
+        generation_kwargs["sampler"] = sampler
+
+        logger.debug(f"Using temperature: {temp_value}, top_p: {top_p_value}")
 
     return generation_kwargs
 
