@@ -82,7 +82,9 @@ def create_streaming_response(
                         if finish_reason == "tool_calls" and accumulated_response:
                             from .model_manager import parse_tool_calls
 
-                            tool_calls = parse_tool_calls(accumulated_response)
+                            tool_calls = parse_tool_calls(
+                                accumulated_response, model_name
+                            )
                             if tool_calls:
                                 # Send tool calls as delta
                                 tool_chunk = {

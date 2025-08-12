@@ -219,7 +219,7 @@ class TestModelGenerationIntegration:
         # Should be called once now (we decode tokens for debugging)
         mock_tokenizer.apply_chat_template.assert_called_once()
         mock_generate.assert_called_once()
-        mock_parse_tools.assert_called_once_with("model response")
+        mock_parse_tools.assert_called_once_with("model response", "test-model")
 
     @patch("mlx_server_nano.model_manager.load")
     @patch("mlx_server_nano.model_manager.generation.stream_generate")

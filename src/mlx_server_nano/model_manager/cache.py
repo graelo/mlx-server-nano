@@ -216,8 +216,13 @@ class ConversationState:
         try:
             from mlx_lm.models.cache import make_prompt_cache
 
-            cache = make_prompt_cache(model)
-            logger.debug(f"Created MLX-LM prompt cache: {type(cache)}")
+            # Based on performance testing, optimal cache size for conversation extensions
+            # is around 256-512 tokens. Larger caches hurt performance due to overhead.
+            # Use None (default) which seems to work best for small conversations
+            cache = make_prompt_cache(model, max_kv_size=None)
+            logger.debug(
+                f"Created MLX-LM prompt cache with default size: {type(cache)}"
+            )
             return cache
         except ImportError:
             logger.warning("MLX-LM cache module not available, using empty list")
@@ -233,6 +238,64 @@ class ConversationState:
         self.last_used = time.time()
         self.message_history = messages.copy()
         self.message_count = len(messages)
+
+        # Trim cache if it's getting too large for optimal performance
+        self._trim_cache_if_needed()
+
+    def _trim_cache_if_needed(self):
+        """Trim cache if it exceeds optimal size for performance."""
+        if not self.prompt_cache or len(self.prompt_cache) == 0:
+            return
+
+        try:
+            from mlx_lm.models.cache import can_trim_prompt_cache, trim_prompt_cache
+
+            # Check if cache can be trimmed and if it's getting large
+            if can_trim_prompt_cache(self.prompt_cache):
+                # Check current cache size
+                if (
+                    hasattr(self.prompt_cache[0], "keys")
+                    and self.prompt_cache[0].keys is not None
+                ):
+                    current_size = (
+                        self.prompt_cache[0].keys.shape[2]
+                        if len(self.prompt_cache[0].keys.shape) > 2
+                        else 0
+                    )
+
+                    # If cache is larger than 512 tokens, trim to 256 tokens for optimal performance
+                    if current_size > 512:
+                        tokens_to_trim = current_size - 256
+                        logger.debug(
+                            f"Trimming cache from {current_size} to 256 tokens (trimming {tokens_to_trim})"
+                        )
+
+                        # trim_prompt_cache modifies the cache in place and returns the trimmed cache
+                        trim_prompt_cache(self.prompt_cache, tokens_to_trim)
+                        # Check if the operation succeeded by checking cache size after
+                        if (
+                            hasattr(self.prompt_cache[0], "keys")
+                            and self.prompt_cache[0].keys is not None
+                        ):
+                            new_size = (
+                                self.prompt_cache[0].keys.shape[2]
+                                if len(self.prompt_cache[0].keys.shape) > 2
+                                else 0
+                            )
+                            actual_trimmed = current_size - new_size
+                            if actual_trimmed > 0:
+                                logger.info(
+                                    f"Successfully trimmed {actual_trimmed} tokens from cache for conversation {self.conversation_id}"
+                                )
+                            else:
+                                logger.debug(
+                                    "Cache trim operation completed but may not have reduced size as expected"
+                                )
+
+        except ImportError:
+            logger.debug("MLX-LM cache trimming not available")
+        except Exception as e:
+            logger.warning(f"Failed to trim cache: {e}")
 
     def should_expire(self) -> bool:
         """Check if this conversation should be expired based on idle time."""

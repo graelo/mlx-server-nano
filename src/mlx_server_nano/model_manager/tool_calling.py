@@ -24,20 +24,74 @@ from ..schemas import Tool, ToolCall
 logger = logging.getLogger(__name__)
 
 
-def parse_tool_calls(response: str) -> list[ToolCall]:
+def parse_tool_calls(response: str, model_name: Optional[str] = None) -> list[ToolCall]:
     """
     Parse tool calls from model response using MLX-LM compatible format.
 
-    Supports multiple formats:
-    - Mistral format: [TOOL_CALLS]function_name[ARGS]{"arg1": "value1"}
-    - Multiple calls: [TOOL_CALLS]func1[ARGS]{...}[TOOL_CALLS]func2[ARGS]{...}
+    Supports multiple formats based on model type:
+    - Mistral models: [TOOL_CALLS]function_name[ARGS]{"arg1": "value1"}
+    - ChatML models (Qwen, etc.): <tool_call>{"name": "function_name", "arguments": {...}}</tool_call>
 
     Args:
         response: The model response text
+        model_name: Optional model name to optimize parsing strategy
 
     Returns:
         List of parsed ToolCall objects
     """
+    tool_calls = []
+
+    # Determine parsing strategy based on model name
+    is_mistral_model = model_name and "mistral" in model_name.lower()
+
+    if is_mistral_model:
+        # For Mistral models, try Mistral format first
+        tool_calls = _parse_mistral_format(response)
+        if tool_calls:
+            return tool_calls
+        # Fall back to XML format if Mistral format fails
+        tool_calls = _parse_xml_format(response)
+    else:
+        # For other models (ChatML, etc.), try XML format first
+        tool_calls = _parse_xml_format(response)
+        if tool_calls:
+            return tool_calls
+        # Fall back to Mistral format if XML format fails
+        tool_calls = _parse_mistral_format(response)
+
+    return tool_calls
+
+
+def _parse_xml_format(response: str) -> list[ToolCall]:
+    """Parse XML format tool calls: <tool_call>{"name": "...", "arguments": {...}}</tool_call>"""
+    tool_calls = []
+    xml_pattern = r"<tool_call>(.*?)</tool_call>"
+
+    for match in re.finditer(xml_pattern, response, re.DOTALL):
+        try:
+            json_content = match.group(1).strip()
+            tool_data = json.loads(json_content)
+
+            if "name" in tool_data and "arguments" in tool_data:
+                tool_call = ToolCall(
+                    id="".join(
+                        random.choices(string.ascii_letters + string.digits, k=9)
+                    ),
+                    type="function",
+                    function={
+                        "name": tool_data["name"],
+                        "arguments": json.dumps(tool_data["arguments"]),
+                    },
+                )
+                tool_calls.append(tool_call)
+        except json.JSONDecodeError as e:
+            logger.warning(f"Failed to parse XML format tool call: {e}")
+
+    return tool_calls
+
+
+def _parse_mistral_format(response: str) -> list[ToolCall]:
+    """Parse Mistral format tool calls: [TOOL_CALLS]function_name[ARGS]{...}"""
     tool_calls = []
     pattern = r"\[TOOL_CALLS\]([^\[]+)\[ARGS\]"
 
@@ -94,17 +148,18 @@ def parse_tool_calls(response: str) -> list[ToolCall]:
     return tool_calls
 
 
-def has_tool_calls(response: str) -> bool:
+def has_tool_calls(response: str, model_name: Optional[str] = None) -> bool:
     """
     Simple tool call detection using MLX-LM parsing.
 
     Args:
         response: The model response text
+        model_name: Optional model name to optimize parsing strategy
 
     Returns:
         True if response contains tool calls, False otherwise
     """
-    tool_calls = parse_tool_calls(response)
+    tool_calls = parse_tool_calls(response, model_name)
     return len(tool_calls) > 0
 
 
@@ -127,7 +182,7 @@ def _contains_tool_calls(
         return False
 
     try:
-        tool_calls = parse_tool_calls(response)
+        tool_calls = parse_tool_calls(response, model_name)
 
         logger.debug(
             f"Tool call detection - Model: {model_name}, Using native MLX-LM parsing"

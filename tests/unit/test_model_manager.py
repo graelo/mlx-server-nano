@@ -378,7 +378,7 @@ class TestGenerateResponseIntegration:
         # apply_chat_template should be called once now (we decode tokens for debugging)
         mock_tokenizer.apply_chat_template.assert_called_once()
         mock_generate.assert_called_once()
-        mock_parse_tools.assert_called_once_with("model response")
+        mock_parse_tools.assert_called_once_with("model response", "test-model")
 
     @patch("mlx_server_nano.model_manager.generation.load_model")
     def test_generate_response_with_tools_load_error(self, mock_load_model):

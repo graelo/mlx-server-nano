@@ -159,7 +159,7 @@ def generate_response_with_tools(
     # Parse tool calls from response
     try:
         logger.debug("Parsing tool calls from response using native MLX-LM parsing")
-        tool_calls = parse_tool_calls(response)
+        tool_calls = parse_tool_calls(response, model_name)
 
         # For compatibility, we return the original response as content
         # since our new parser doesn't separate content from tool calls
@@ -412,7 +412,7 @@ def generate_response_with_tools_cached(
     # Parse tool calls from response
     try:
         logger.debug("Parsing tool calls from cached response")
-        tool_calls = parse_tool_calls(response)
+        tool_calls = parse_tool_calls(response, model_name)
 
         # For compatibility, we return the original response as content
         content = response
