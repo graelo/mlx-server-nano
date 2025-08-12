@@ -16,7 +16,7 @@ import logging
 import random
 import re
 import string
-from typing import List, Optional
+from typing import Optional
 
 from ..schemas import Tool, ToolCall
 
@@ -24,7 +24,7 @@ from ..schemas import Tool, ToolCall
 logger = logging.getLogger(__name__)
 
 
-def parse_tool_calls(response: str) -> List[ToolCall]:
+def parse_tool_calls(response: str) -> list[ToolCall]:
     """
     Parse tool calls from model response using MLX-LM compatible format.
 
@@ -87,7 +87,7 @@ def has_tool_calls(response: str) -> bool:
 
 
 def _contains_tool_calls(
-    response: str, model_name: str, tools: Optional[List[Tool]] = None
+    response: str, model_name: str, tools: Optional[list[Tool]] = None
 ) -> bool:
     """
     Check if the response contains tool calls by parsing it.

@@ -13,8 +13,6 @@ from fastapi.responses import StreamingResponse
 
 import json
 from .model_manager import (
-    generate_response_with_tools,
-    generate_response_stream,
     generate_response_with_tools_cached,
     generate_response_stream_cached,
     get_conversation_cache_stats,

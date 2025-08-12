@@ -17,10 +17,9 @@ Features:
 import gc
 import hashlib
 import logging
-import os
 import threading
 import time
-from typing import Dict, List, Optional, Tuple
+from typing import Optional
 
 import mlx.core as mx
 
@@ -150,7 +149,7 @@ def load_model(name: str):
                 f"Failed to load model '{name}': {type(e).__name__}: {str(e)}",
                 exc_info=True,
             )
-            raise RuntimeError(f"Failed to load model '{name}': {e}")
+            raise RuntimeError(f"Failed to load model '{name}'") from e
 
         _loaded_model = (model, tokenizer)
         _model_name = name
@@ -170,7 +169,7 @@ def update_last_used_time():
         _last_used_time = get_current_time()
 
 
-def get_cache_state() -> Tuple[Optional[str], float]:
+def get_cache_state() -> tuple[Optional[str], float]:
     """Get current cache state for background task management."""
     with _lock:
         return _model_name, _last_used_time
@@ -229,7 +228,7 @@ class ConversationState:
             )
             return []
 
-    def update_usage(self, messages: List[Message]):
+    def update_usage(self, messages: list[Message]):
         """Update conversation state with new messages."""
         self.last_used = time.time()
         self.message_history = messages.copy()
@@ -250,12 +249,12 @@ class ConversationState:
 
 
 # Global conversation cache state
-_conversation_states: Dict[str, ConversationState] = {}
+_conversation_states: dict[str, ConversationState] = {}
 _conversation_lock = threading.Lock()
 
 
 def detect_conversation_continuation(
-    new_messages: List[Message], cached_conversations: Dict[str, ConversationState]
+    new_messages: list[Message], cached_conversations: dict[str, ConversationState]
 ) -> Optional[str]:
     """
     Detect if new messages are a continuation of an existing conversation.
@@ -325,7 +324,7 @@ def detect_conversation_continuation(
     return best_match_id
 
 
-def generate_conversation_hash(messages: List[Message]) -> str:
+def generate_conversation_hash(messages: list[Message]) -> str:
     """Generate stable hash from conversation content for cache key."""
     if not messages:
         return "empty"
@@ -340,7 +339,7 @@ def generate_conversation_hash(messages: List[Message]) -> str:
 
 
 def get_or_create_conversation_state(
-    conversation_id: Optional[str], model_name: str, messages: List[Message], model=None
+    conversation_id: Optional[str], model_name: str, messages: list[Message], model=None
 ) -> ConversationState:
     """
     Get existing conversation state or create new one.
@@ -353,32 +352,32 @@ def get_or_create_conversation_state(
     Returns:
         ConversationState object for this conversation
     """
-    print(
-        f"[DEBUG] get_or_create_conversation_state called with conv_id={conversation_id}, model={model_name}"
+    logger.debug(
+        f"get_or_create_conversation_state called with conv_id={conversation_id}, model={model_name}"
     )
 
     with _conversation_lock:
-        print(f"[DEBUG] Acquired lock")
+        logger.debug("Acquired lock")
 
         # Try auto-detection if no explicit ID provided
         if not conversation_id and config.auto_detect_conversations:
-            print(f"[DEBUG] Attempting auto-detection")
+            logger.debug("Attempting auto-detection")
             conversation_id = detect_conversation_continuation(
                 messages, _conversation_states
             )
-            print(f"[DEBUG] Auto-detection result: {conversation_id}")
+            logger.debug(f"Auto-detection result: {conversation_id}")
 
         # Fall back to content-based hash if still no ID
         if not conversation_id:
-            print(f"[DEBUG] Generating hash-based ID")
+            logger.debug("Generating hash-based ID")
             conversation_id = f"auto_{generate_conversation_hash(messages)}"
-            print(f"[DEBUG] Generated ID: {conversation_id}")
+            logger.debug(f"Generated ID: {conversation_id}")
 
-        print(f"[DEBUG] Final conversation_id: {conversation_id}")
+        logger.debug(f"Final conversation_id: {conversation_id}")
 
         # Get existing or create new conversation state
         if conversation_id in _conversation_states:
-            print(f"[DEBUG] Found existing conversation")
+            logger.debug("Found existing conversation")
             conv_state = _conversation_states[conversation_id]
             # Verify model matches
             if conv_state.model_name != model_name:
@@ -388,12 +387,12 @@ def get_or_create_conversation_state(
                 )
                 # Create new conversation with different ID
                 conversation_id = f"{conversation_id}_{model_name}"
-                print(f"[DEBUG] Model mismatch, new ID: {conversation_id}")
+                logger.info(f"Model mismatch, new ID: {conversation_id}")
                 # Note: this will fall through to the creation logic below
 
         # Create new conversation state if needed
         if conversation_id not in _conversation_states:
-            print("[DEBUG] Creating new conversation state")
+            logger.debug("Creating new conversation state")
             # Clean up expired conversations if we're at capacity
             _cleanup_expired_conversations_unsafe()
 
@@ -412,15 +411,12 @@ def get_or_create_conversation_state(
                 conversation_id, model_name, conversation_hash, model
             )
             logger.info(f"Created new conversation state: {conversation_id}")
-            print(f"[DEBUG] Created new conversation: {conversation_id}")
 
         conv_state = _conversation_states[conversation_id]
-        print(f"[DEBUG] Updating usage")
+        logger.debug("Updating usage")
         conv_state.update_usage(messages)
 
-        print(f"[DEBUG] Returning conversation state")
-        return conv_state
-
+        logger.debug("Returning conversation state")
         return conv_state
 
 
@@ -443,7 +439,7 @@ def _cleanup_expired_conversations_unsafe():
         logger.info(f"Expired conversation cache: {conv_id}")
 
 
-def get_conversation_cache_stats() -> Dict[str, int | float | bool]:
+def get_conversation_cache_stats() -> dict[str, int | float | bool]:
     """Get statistics about conversation caching."""
     with _conversation_lock:
         total_conversations = len(_conversation_states)

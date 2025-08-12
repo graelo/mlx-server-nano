@@ -13,7 +13,7 @@ Features:
 """
 
 import logging
-from typing import List, Optional, Tuple, Union
+from typing import Optional
 
 from mlx_lm.generate import generate, stream_generate
 
@@ -87,11 +87,11 @@ def _try_generate_with_fallback(
 
 def generate_response_with_tools(
     model_name: str,
-    messages: List,
-    tools: Optional[List[Tool]] = None,
-    stop: Optional[Union[str, List[str]]] = None,
+    messages: list,
+    tools: Optional[list[Tool]] = None,
+    stop: Optional[str | list[str]] = None,
     **kwargs,
-) -> Tuple[Optional[str], List[ToolCall]]:
+) -> tuple[Optional[str], list[ToolCall]]:
     """
     Generate response with tool calling support.
 
@@ -169,8 +169,8 @@ def generate_response_with_tools(
 def generate_response_stream(
     model_name: str,
     messages: list,
-    tools: Optional[List[Tool]] = None,
-    stop: Optional[Union[str, List[str]]] = None,
+    tools: Optional[list[Tool]] = None,
+    stop: Optional[str | list[str]] = None,
     **kwargs,
 ):
     """
@@ -262,12 +262,12 @@ def generate_response_stream(
 
 def generate_response_with_tools_cached(
     model_name: str,
-    messages: List[Message],
-    tools: Optional[List[Tool]] = None,
+    messages: list[Message],
+    tools: Optional[list[Tool]] = None,
     conversation_id: Optional[str] = None,
-    stop: Optional[Union[str, List[str]]] = None,
+    stop: Optional[str | list[str]] = None,
     **kwargs,
-) -> Tuple[Optional[str], List[ToolCall]]:
+) -> tuple[Optional[str], list[ToolCall]]:
     """
     Generate response with tool calling support and conversation-level prompt caching.
 
@@ -421,10 +421,10 @@ def generate_response_with_tools_cached(
 
 def generate_response_stream_cached(
     model_name: str,
-    messages: List[Message],
-    tools: Optional[List[Tool]] = None,
+    messages: list[Message],
+    tools: Optional[list[Tool]] = None,
     conversation_id: Optional[str] = None,
-    stop: Optional[Union[str, List[str]]] = None,
+    stop: Optional[str | list[str]] = None,
     **kwargs,
 ):
     """

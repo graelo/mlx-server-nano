@@ -12,7 +12,6 @@ Features:
 """
 
 import logging
-from typing import List
 
 from mistral_common.tokens.tokenizers.base import SpecialTokenPolicy
 
@@ -27,7 +26,7 @@ def _convert_messages_to_dicts(messages):
     Convert Pydantic Message objects to dictionaries for MLX-LM compatibility.
 
     Args:
-        messages: List of Message objects or dictionaries
+        messages: list of Message objects or dictionaries
 
     Returns:
         List of dictionaries
@@ -46,7 +45,7 @@ def _convert_messages_to_dicts(messages):
     return converted_messages
 
 
-def format_messages_for_generation(messages: List, tools: List[Tool], tokenizer) -> str:
+def format_messages_for_generation(messages: list, tools: list[Tool], tokenizer) -> str:
     """
     Format messages for generation using MLX-LM chat template.
 
