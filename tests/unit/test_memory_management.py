@@ -146,7 +146,7 @@ class TestMemoryLifecycleIntegration:
         test_timeout = 2  # From test_env_vars
 
         with (
-            patch.object(model_manager.cache, "_unload_model", synchronized_unload),
+            patch.object(model_manager.cache, "unload_model", synchronized_unload),
             patch.object(
                 model_manager.background_tasks, "MODEL_IDLE_TIMEOUT", test_timeout
             ),
