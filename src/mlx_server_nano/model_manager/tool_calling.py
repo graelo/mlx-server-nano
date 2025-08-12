@@ -39,35 +39,57 @@ def parse_tool_calls(response: str) -> list[ToolCall]:
         List of parsed ToolCall objects
     """
     tool_calls = []
+    pattern = r"\[TOOL_CALLS\]([^\[]+)\[ARGS\]"
 
-    # Mistral format: [TOOL_CALLS]function_name[ARGS]{"arguments": "json"}
-    mistral_pattern = r"\[TOOL_CALLS\]([^\[]+)\[ARGS\](\{.*?\})"
-    matches = re.findall(mistral_pattern, response, re.DOTALL)
+    for match in re.finditer(pattern, response):
+        function_name = match.group(1).strip()
+        start_pos = match.end()
 
-    for function_name, args_json in matches:
-        function_name = function_name.strip()
+        # Find the opening brace
+        brace_start = response.find("{", start_pos)
+        if brace_start == -1:
+            continue
+
+        # Extract JSON by counting braces, respecting quotes
+        brace_count = 0
+        in_quotes = False
+        escaped = False
+
+        for i, char in enumerate(response[brace_start:], brace_start):
+            if escaped:
+                escaped = False
+                continue
+
+            if char == "\\" and in_quotes:
+                escaped = True
+            elif char == '"' and not escaped:
+                in_quotes = not in_quotes
+            elif not in_quotes:
+                if char == "{":
+                    brace_count += 1
+                elif char == "}":
+                    brace_count -= 1
+                    if brace_count == 0:
+                        json_str = response[brace_start : i + 1]
+                        break
+        else:
+            continue  # No matching closing brace found
+
         try:
-            # Parse the JSON arguments
-            arguments = json.loads(args_json.strip())
-
-            # Create tool call
+            arguments = json.loads(json_str)
             tool_call = ToolCall(
-                id="".join(
-                    random.choices(string.ascii_letters + string.digits, k=9)
-                ),  # 9 alphanumeric characters
+                id="".join(random.choices(string.ascii_letters + string.digits, k=9)),
                 type="function",
                 function={
                     "name": function_name,
-                    "arguments": json.dumps(arguments),  # Store as JSON string
+                    "arguments": json.dumps(arguments),
                 },
             )
             tool_calls.append(tool_call)
-
         except json.JSONDecodeError as e:
             logger.warning(
                 f"Failed to parse tool call arguments for {function_name}: {e}"
             )
-            continue
 
     return tool_calls
 
