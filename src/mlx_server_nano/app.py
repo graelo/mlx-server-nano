@@ -124,8 +124,14 @@ def create_streaming_response(
                     accumulated_response += chunk_text
 
                     # Check if we're in a tool call - don't stream tool call format as content
-                    # Tool calls start with [TOOL_CALLS], so detect them early
-                    is_tool_call_content = "[TOOL_CALLS]" in accumulated_response
+                    # Tool calls can be emitted in different formats. Detect them early
+                    # to avoid streaming raw tool-call markup as regular content.
+                    # - Mistral format uses [TOOL_CALLS]
+                    # - ChatML models (Qwen, etc.) use <tool_call>...</tool_call>
+                    is_tool_call_content = (
+                        "[TOOL_CALLS]" in accumulated_response
+                        or "<tool_call" in accumulated_response
+                    )
 
                     # For regular text (not tool calls), stream as content
                     if not is_tool_call_content:
