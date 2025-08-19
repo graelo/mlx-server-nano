@@ -16,6 +16,9 @@ Conversation Caching Environment Variables:
 - MLX_CONVERSATION_CACHE_ENABLED: Enable conversation caching (default: true)
 - MLX_CONVERSATION_IDLE_TIMEOUT: Conversation idle timeout in seconds (default: 300)
 - MLX_MAX_CONVERSATIONS: Maximum number of cached conversations (default: 10)
+- MLX_CACHE_TYPE: Cache type (KVCache, QuantizedKVCache, RotatingKVCache, ChunkedKVCache, ConcatenateKVCache) (default: KVCache)
+- MLX_CACHE_MAX_SIZE: Maximum cache size for RotatingKVCache (default: 1000)
+- MLX_CACHE_CHUNK_SIZE: Chunk size for ChunkedKVCache (default: 512)
 - MLX_CACHE_QUANTIZATION_ENABLED: Enable cache quantization (default: true)
 - MLX_CACHE_QUANTIZATION_BITS: Quantization bits for cache (default: 8)
 - MLX_MAX_CACHED_TOKENS_PER_CONVERSATION: Max tokens per conversation cache (default: 4096)
@@ -27,7 +30,17 @@ Conversation Caching Environment Variables:
 """
 
 import os
+
+from enum import Enum
 from dataclasses import dataclass
+
+
+class CacheType(str, Enum):
+    KVCache = "KVCache"
+    QuantizedKVCache = "QuantizedKVCache"
+    RotatingKVCache = "RotatingKVCache"
+    ChunkedKVCache = "ChunkedKVCache"
+    ConcatenateKVCache = "ConcatenateKVCache"
 
 
 @dataclass
@@ -45,6 +58,9 @@ class ServerConfig:
     conversation_cache_enabled: bool = True
     conversation_idle_timeout: int = 300  # seconds
     max_conversations: int = 10
+    cache_type: CacheType = CacheType.KVCache  # Use enum for cache type
+    cache_max_size: int = 1000  # For RotatingKVCache
+    cache_chunk_size: int = 512  # For ChunkedKVCache
     cache_quantization_enabled: bool = True
     cache_quantization_bits: int = 8
     max_cached_tokens_per_conversation: int = 4096
@@ -57,6 +73,11 @@ class ServerConfig:
     @classmethod
     def from_env(cls) -> "ServerConfig":
         """Create configuration from environment variables."""
+        cache_type_str = os.environ.get("MLX_CACHE_TYPE", "KVCache")
+        try:
+            cache_type = CacheType(cache_type_str)
+        except ValueError:
+            cache_type = CacheType.KVCache
         return cls(
             host=os.environ.get("MLX_SERVER_HOST", "0.0.0.0"),
             port=int(os.environ.get("MLX_SERVER_PORT", "8000")),
@@ -73,6 +94,9 @@ class ServerConfig:
                 os.environ.get("MLX_CONVERSATION_IDLE_TIMEOUT", "300")
             ),
             max_conversations=int(os.environ.get("MLX_MAX_CONVERSATIONS", "10")),
+            cache_type=cache_type,
+            cache_max_size=int(os.environ.get("MLX_CACHE_MAX_SIZE", "1000")),
+            cache_chunk_size=int(os.environ.get("MLX_CACHE_CHUNK_SIZE", "512")),
             cache_quantization_enabled=os.environ.get(
                 "MLX_CACHE_QUANTIZATION_ENABLED", "true"
             ).lower()

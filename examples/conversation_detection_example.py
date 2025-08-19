@@ -6,7 +6,15 @@ This example demonstrates how MLX Server Nano automatically detects
 conversation continuations and manages conversation state for caching.
 
 This is useful for understanding how the automatic conversation detection
-system works under the hood.
+system works under the hood, and showcases the different cache types
+available with the new cache manager architecture.
+
+Features demonstrated:
+- Automatic conversation detection
+- Explicit conversation ID management
+- Cache statistics and cleanup
+- Different cache types (KVCache, QuantizedKVCache, RotatingKVCache, etc.)
+- CLI configuration options for cache management
 """
 
 import sys
@@ -16,12 +24,14 @@ import os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from mlx_server_nano.schemas import Message
-from mlx_server_nano.model_manager.cache import (
+from mlx_server_nano.model_manager.cache_manager import (
     get_or_create_conversation_state,
     generate_conversation_hash,
     get_conversation_cache_stats,
     cleanup_expired_conversations,
+    PromptCacheManager,
 )
+from mlx_server_nano.config import config, CacheType
 
 
 def demonstrate_conversation_detection():
@@ -123,6 +133,58 @@ def show_cache_statistics():
     print()
 
 
+def demonstrate_cache_types():
+    """Demonstrate different cache types available."""
+    print("=== Cache Types Demo ===")
+    print()
+
+    print("🔧 Available cache types:")
+    for cache_type in CacheType:
+        print(f"   • {cache_type.value}")
+    print()
+
+    print("⚙️  Current server configuration:")
+    print(f"   Cache type: {config.cache_type.value}")
+    print(f"   Cache enabled: {config.conversation_cache_enabled}")
+    print(f"   Max conversations: {config.max_conversations}")
+    print(f"   Cache timeout: {config.conversation_idle_timeout}s")
+
+    if config.cache_type == CacheType.RotatingKVCache:
+        print(f"   Max cache size: {config.cache_max_size}")
+    elif config.cache_type == CacheType.ChunkedKVCache:
+        print(f"   Chunk size: {config.cache_chunk_size}")
+    elif config.cache_type == CacheType.QuantizedKVCache:
+        print(f"   Quantization bits: {config.cache_quantization_bits}")
+    print()
+
+    print("🏗️  Creating cache manager with current config:")
+    cache_config = {
+        "cache_type": config.cache_type.value,
+        "max_conversations": config.max_conversations,
+        "conversation_idle_timeout": config.conversation_idle_timeout,
+        "cache_max_size": config.cache_max_size,
+        "cache_chunk_size": config.cache_chunk_size,
+        "quantization_bits": config.cache_quantization_bits,
+    }
+
+    try:
+        cache_manager = PromptCacheManager(cache_config)
+        print(f"   ✅ Successfully created {config.cache_type.value} cache manager")
+
+        # Demonstrate cache creation
+        test_cache = cache_manager.get_cache("demo-conversation")
+        print(f"   ✅ Created cache for demo conversation: {type(test_cache).__name__}")
+
+        # Get cache statistics
+        stats = cache_manager.get_cache_stats()
+        print(f"   📊 Cache stats: {stats}")
+
+    except Exception as e:
+        print(f"   ❌ Failed to create cache manager: {e}")
+        print("   Note: This is expected if MLX is not installed")
+    print()
+
+
 def main():
     """Run all conversation detection examples."""
     print("MLX Server Nano - Conversation Detection Examples")
@@ -135,6 +197,7 @@ def main():
         demonstrate_conversation_detection()
         demonstrate_explicit_conversation_ids()
         show_cache_statistics()
+        demonstrate_cache_types()
 
         print("💡 Key Points:")
         print(
@@ -142,13 +205,28 @@ def main():
         )
         print("• You can use explicit conversation IDs for precise control")
         print("• Cache cleanup happens automatically based on idle timeouts")
+        print("• Multiple cache types are available for different use cases:")
+        print("  - KVCache: Standard cache for general use")
+        print("  - QuantizedKVCache: Memory-efficient cache")
+        print("  - RotatingKVCache: Fixed-size cache with predictable memory usage")
+        print("  - ChunkedKVCache: Optimized for batch processing")
+        print("  - ConcatenateKVCache: Best for context-heavy applications")
         print(
             "• All of this works transparently with the API - no configuration needed!"
+        )
+        print()
+        print("🚀 To change cache types, use CLI options:")
+        print("   uv run mlx-server-nano --cache-type quantizedkvcache")
+        print(
+            "   uv run mlx-server-nano --cache-type rotatingkvcache --cache-max-size 2000"
         )
 
     except Exception as e:
         print(f"Example failed with error: {e}")
         print("Make sure MLX Server Nano is properly installed.")
+        import traceback
+
+        traceback.print_exc()
 
 
 if __name__ == "__main__":

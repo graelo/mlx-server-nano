@@ -46,28 +46,56 @@ class ConversationState:
         self.message_count = 0
 
     def _create_prompt_cache(self, model):
-        """Create prompt cache using MLX-LM's official function."""
+        """Create prompt cache using MLX-LM's cache types based on configuration."""
         if model is None:
             # If no model provided, return empty list as fallback
             return []
 
         try:
-            from mlx_lm.models.cache import make_prompt_cache
-
-            # Based on performance testing, optimal cache size for conversation extensions
-            # is around 256-512 tokens. Larger caches hurt performance due to overhead.
-            # Use None (default) which seems to work best for small conversations
-            cache = make_prompt_cache(model, max_kv_size=None)
-            logger.debug(
-                f"Created MLX-LM prompt cache with default size: {type(cache)}"
+            from mlx_lm.models.cache import (
+                KVCache,
+                QuantizedKVCache,
+                RotatingKVCache,
+                ChunkedKVCache,
+                ConcatenateKVCache,
             )
+
+            cache_type = config.cache_type.value  # Get string value from enum
+
+            if cache_type == "KVCache":
+                cache = KVCache()
+                logger.debug("Created KVCache")
+            elif cache_type == "QuantizedKVCache":
+                cache = QuantizedKVCache(bits=config.cache_quantization_bits)
+                logger.debug(
+                    f"Created QuantizedKVCache with {config.cache_quantization_bits} bits"
+                )
+            elif cache_type == "RotatingKVCache":
+                cache = RotatingKVCache(max_size=config.cache_max_size)
+                logger.debug(
+                    f"Created RotatingKVCache with max_size={config.cache_max_size}"
+                )
+            elif cache_type == "ChunkedKVCache":
+                cache = ChunkedKVCache(chunk_size=config.cache_chunk_size)
+                logger.debug(
+                    f"Created ChunkedKVCache with chunk_size={config.cache_chunk_size}"
+                )
+            elif cache_type == "ConcatenateKVCache":
+                cache = ConcatenateKVCache()
+                logger.debug("Created ConcatenateKVCache")
+            else:
+                logger.warning(
+                    f"Unknown cache type: {cache_type}, falling back to KVCache"
+                )
+                cache = KVCache()
+
             return cache
         except ImportError:
             logger.warning("MLX-LM cache module not available, using empty list")
             return []
         except Exception as e:
             logger.warning(
-                f"Failed to create MLX-LM prompt cache: {e}, using empty list"
+                f"Failed to create {config.cache_type.value} cache: {e}, using empty list"
             )
             return []
 

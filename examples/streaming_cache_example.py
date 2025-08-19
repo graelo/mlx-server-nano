@@ -5,6 +5,12 @@ Streaming with Caching Example
 This example demonstrates how MLX Server Nano's prompt caching works
 with streaming generation, providing performance improvements for
 streaming responses in conversational scenarios.
+
+Features demonstrated:
+- Streaming performance with different cache types
+- Cache optimization for streaming workloads
+- Real-time performance metrics for streaming
+- Best practices for streaming cache configuration
 """
 
 import os
@@ -17,7 +23,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from mlx_server_nano.schemas import Message
 from mlx_server_nano.model_manager.generation import generate_response_stream_cached
-from mlx_server_nano.model_manager.cache import get_conversation_cache_stats
+from mlx_server_nano.model_manager.cache_manager import (
+    get_conversation_cache_stats,
+    PromptCacheManager,
+)
+from mlx_server_nano.config import config, CacheType
 
 # Set up logging to see cache activity (optional - set to DEBUG for more details)
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -148,6 +158,121 @@ def demonstrate_streaming_cache():
     }
 
 
+def demonstrate_streaming_cache_types():
+    """Demonstrate different cache types optimized for streaming."""
+    print("\n" + "=" * 60)
+    print("STREAMING CACHE TYPES OPTIMIZATION")
+    print("=" * 60)
+    print("Comparing cache types for streaming performance characteristics.")
+    print()
+
+    print("🔧 Current Streaming Cache Configuration:")
+    print(f"   Cache type: {config.cache_type.value}")
+    print(f"   Cache enabled: {config.conversation_cache_enabled}")
+
+    # Show cache-specific optimizations for streaming
+    if config.cache_type == CacheType.RotatingKVCache:
+        print(f"   Max cache size: {config.cache_max_size}")
+        print("   🌊 STREAMING OPTIMIZATION: Fixed memory, predictable latency")
+    elif config.cache_type == CacheType.QuantizedKVCache:
+        print(f"   Quantization bits: {config.cache_quantization_bits}")
+        print("   🌊 STREAMING OPTIMIZATION: Lower memory usage, sustained throughput")
+    elif config.cache_type == CacheType.ChunkedKVCache:
+        print(f"   Chunk size: {config.cache_chunk_size}")
+        print("   🌊 STREAMING OPTIMIZATION: Parallel processing, high-throughput")
+    elif config.cache_type == CacheType.ConcatenateKVCache:
+        print("   🌊 STREAMING OPTIMIZATION: Full context preservation")
+    else:  # KVCache
+        print("   🌊 STREAMING OPTIMIZATION: Balanced performance")
+    print()
+
+    print("⚡ Streaming Cache Manager Performance:")
+    cache_config = {
+        "cache_type": config.cache_type.value,
+        "max_conversations": config.max_conversations,
+        "conversation_idle_timeout": config.conversation_idle_timeout,
+        "cache_max_size": config.cache_max_size,
+        "cache_chunk_size": config.cache_chunk_size,
+        "quantization_bits": config.cache_quantization_bits,
+    }
+
+    try:
+        # Measure streaming-specific cache operations
+        start_time = time.time()
+        cache_manager = PromptCacheManager(cache_config)
+        manager_time = time.time() - start_time
+
+        # Create multiple cache instances (simulating concurrent streams)
+        start_time = time.time()
+        stream_caches = {}
+        for i in range(3):  # Simulate 3 concurrent streaming conversations
+            stream_caches[f"stream_{i}"] = cache_manager.get_cache(
+                f"streaming-conversation-{i}"
+            )
+        multi_cache_time = time.time() - start_time
+
+        print(f"   ✅ Cache manager for streaming: {manager_time * 1000:.2f}ms")
+        print(f"   ✅ 3 concurrent stream caches: {multi_cache_time * 1000:.2f}ms")
+        print(f"   📊 Average per stream: {(multi_cache_time / 3) * 1000:.2f}ms")
+
+        # Test cache statistics for streaming
+        stats = cache_manager.get_cache_stats()
+        print(f"   📈 Active conversations: {stats.get('internal_caches', 0)}")
+
+        return {
+            "manager_time": manager_time,
+            "multi_cache_time": multi_cache_time,
+            "per_stream_time": multi_cache_time / 3,
+            "cache_type": config.cache_type.value,
+        }
+
+    except Exception as e:
+        print(f"   ❌ Cache manager test failed: {e}")
+        return None
+
+
+def show_streaming_recommendations():
+    """Show cache recommendations specifically for streaming workloads."""
+    print("\n🌊 Streaming Cache Optimization Guide:")
+    print("-" * 50)
+    print()
+
+    print("🔹 High-Throughput Streaming (Many concurrent streams):")
+    print(
+        "   uv run mlx-server-nano --cache-type chunkedkvcache --cache-chunk-size 256"
+    )
+    print("   → Optimized parallel processing for multiple concurrent streams")
+    print()
+
+    print("🔹 Memory-Constrained Streaming:")
+    print("   uv run mlx-server-nano --cache-type quantizedkvcache")
+    print("   → 50-75% memory reduction while maintaining streaming performance")
+    print()
+
+    print("🔹 Predictable Streaming Performance:")
+    print(
+        "   uv run mlx-server-nano --cache-type rotatingkvcache --cache-max-size 1500"
+    )
+    print("   → Fixed memory ceiling, consistent latency for long streams")
+    print()
+
+    print("🔹 Context-Aware Streaming:")
+    print("   uv run mlx-server-nano --cache-type concatenatekvcache")
+    print("   → Best for streams requiring full conversation context")
+    print()
+
+    print("🔹 Real-Time Streaming Monitoring:")
+    print("   export MLX_LOG_LEVEL=DEBUG")
+    print("   → Track streaming cache performance in real-time")
+    print()
+
+    print("💡 Streaming Performance Tips:")
+    print("   • Use RotatingKVCache for sustained long streaming sessions")
+    print("   • Use ChunkedKVCache for batch streaming multiple requests")
+    print("   • Use QuantizedKVCache when memory is limited")
+    print("   • Monitor cache hit rates with DEBUG logging")
+
+
 def main():
     """Run the streaming cache demonstration."""
     print("To run this example, make sure you have MLX Server Nano installed:")
@@ -155,7 +280,14 @@ def main():
     print()
 
     try:
+        # Original streaming cache demonstration
         results = demonstrate_streaming_cache()
+
+        # New cache types for streaming demonstration
+        cache_results = demonstrate_streaming_cache_types()
+
+        # Streaming-specific recommendations
+        show_streaming_recommendations()
 
         print("\n🎯 Summary:")
         print("-" * 30)
@@ -169,6 +301,25 @@ def main():
             print("   • Longer conversation histories")
             print("   • More complex prompts")
             print("   • Multiple back-and-forth exchanges")
+
+        if cache_results:
+            print("\n⚡ Streaming Cache Manager Performance:")
+            print(f"   • Cache type: {cache_results['cache_type']}")
+            print(f"   • Manager setup: {cache_results['manager_time'] * 1000:.2f}ms")
+            print(
+                f"   • 3 concurrent streams: {cache_results['multi_cache_time'] * 1000:.2f}ms"
+            )
+            print(
+                f"   • Per-stream overhead: {cache_results['per_stream_time'] * 1000:.2f}ms"
+            )
+
+        print("\n🌊 To test streaming with different cache types:")
+        print(
+            "   MLX_CACHE_TYPE=RotatingKVCache python examples/streaming_cache_example.py"
+        )
+        print(
+            "   MLX_CACHE_TYPE=ChunkedKVCache python examples/streaming_cache_example.py"
+        )
 
     except KeyboardInterrupt:
         print("\n\nExample interrupted by user.")

@@ -316,3 +316,19 @@ If you're not seeing expected performance improvements:
 - **Check message patterns**: Ensure follow-up messages include previous conversation history
 - **Review detection threshold**: Lower `MLX_CONVERSATION_DETECTION_THRESHOLD` for looser matching
 - **Monitor cache expiry**: Increase `MLX_CONVERSATION_IDLE_TIMEOUT` for longer-lived conversations
+
+## Documentation
+
+Comprehensive documentation is available in the [`docs/`](docs/) directory:
+
+- **[Cache Management Guide](docs/CACHE_MANAGEMENT.md)** - Detailed guide to the cache management system with multiple cache types
+- **[Testing Guide](docs/TESTING.md)** - Complete testing documentation and best practices
+- **[Examples](examples/)** - Working code examples and performance demonstrations
+
+## Contributing
+
+Contributions are welcome! Please see the [documentation](docs/) for development guidelines and testing procedures.
+
+## License
+
+This project is licensed under the MIT License - see the LICENSE file for details.

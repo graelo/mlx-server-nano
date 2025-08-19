@@ -5,6 +5,12 @@ MLX-LM Prompt Caching Performance Example
 This example demonstrates how MLX Server Nano's prompt caching provides
 significant performance improvements for conversational interactions.
 
+Features demonstrated:
+- Performance comparison between first and cached requests
+- Different cache types and their performance characteristics
+- Cache statistics and management
+- CLI configuration examples
+
 Run this script to see real-world caching performance with your models.
 """
 
@@ -18,7 +24,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from mlx_server_nano.schemas import Message
 from mlx_server_nano.model_manager.generation import generate_response_with_tools_cached
-from mlx_server_nano.model_manager.cache import get_conversation_cache_stats
+from mlx_server_nano.model_manager.cache_manager import (
+    get_conversation_cache_stats,
+    PromptCacheManager,
+)
+from mlx_server_nano.config import config, CacheType
 
 # Set up logging to see what's happening
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -138,6 +148,132 @@ def demonstrate_caching_performance():
     }
 
 
+def demonstrate_cache_types_performance():
+    """Compare performance characteristics of different cache types."""
+    print("\n" + "=" * 60)
+    print("CACHE TYPES PERFORMANCE COMPARISON")
+    print("=" * 60)
+    print("Comparing different cache types and their configurations.")
+    print()
+
+    print("🔧 Current Cache Configuration:")
+    print(f"   Cache type: {config.cache_type.value}")
+    print(f"   Cache enabled: {config.conversation_cache_enabled}")
+    print(f"   Max conversations: {config.max_conversations}")
+    print(f"   Cache timeout: {config.conversation_idle_timeout}s")
+
+    if config.cache_type == CacheType.RotatingKVCache:
+        print(f"   Max cache size: {config.cache_max_size}")
+    elif config.cache_type == CacheType.ChunkedKVCache:
+        print(f"   Chunk size: {config.cache_chunk_size}")
+    elif config.cache_type == CacheType.QuantizedKVCache:
+        print(f"   Quantization bits: {config.cache_quantization_bits}")
+    print()
+
+    print("🏗️  Cache Manager Performance Test:")
+    cache_config = {
+        "cache_type": config.cache_type.value,
+        "max_conversations": config.max_conversations,
+        "conversation_idle_timeout": config.conversation_idle_timeout,
+        "cache_max_size": config.cache_max_size,
+        "cache_chunk_size": config.cache_chunk_size,
+        "quantization_bits": config.cache_quantization_bits,
+    }
+
+    try:
+        # Test cache manager creation performance
+        start_time = time.time()
+        cache_manager = PromptCacheManager(cache_config)
+        creation_time = time.time() - start_time
+        print(f"   ✅ Cache manager created in {creation_time * 1000:.2f}ms")
+
+        # Test cache creation performance
+        start_time = time.time()
+        test_cache = cache_manager.get_cache("perf-test-conversation")
+        cache_creation_time = time.time() - start_time
+        print(f"   ✅ Cache instance created in {cache_creation_time * 1000:.2f}ms")
+        print(f"   📊 Cache type: {type(test_cache).__name__}")
+
+        # Test cache operations
+        start_time = time.time()
+        stats = cache_manager.get_cache_stats()
+        stats_time = time.time() - start_time
+        print(f"   📈 Cache stats retrieved in {stats_time * 1000:.2f}ms")
+
+        # Display cache stats
+        print("\n📊 Detailed Cache Statistics:")
+        print("-" * 40)
+        for key, value in stats.items():
+            if key != "internal_caches":  # Skip internal implementation details
+                print(f"   {key}: {value}")
+
+        print(f"\n💾 Memory Efficiency for {config.cache_type.value}:")
+        if config.cache_type == CacheType.QuantizedKVCache:
+            print("   • Memory usage: ~50-75% less than standard cache")
+            print("   • Best for: Memory-constrained environments")
+        elif config.cache_type == CacheType.RotatingKVCache:
+            print("   • Memory usage: Fixed maximum size")
+            print("   • Best for: Predictable memory requirements")
+        elif config.cache_type == CacheType.ChunkedKVCache:
+            print("   • Memory usage: Optimized for batch processing")
+            print("   • Best for: High-throughput scenarios")
+        elif config.cache_type == CacheType.ConcatenateKVCache:
+            print("   • Memory usage: Optimized for context preservation")
+            print("   • Best for: Context-heavy applications")
+        else:  # KVCache
+            print("   • Memory usage: Standard baseline")
+            print("   • Best for: General purpose use")
+
+        return {
+            "creation_time": creation_time,
+            "cache_creation_time": cache_creation_time,
+            "stats_time": stats_time,
+            "cache_type": config.cache_type.value,
+        }
+
+    except Exception as e:
+        print(f"   ❌ Cache manager test failed: {e}")
+        print("   Note: This is expected if MLX is not installed")
+        return None
+
+
+def print_optimization_recommendations():
+    """Print recommendations for cache optimization."""
+    print("\n🚀 Cache Optimization Recommendations:")
+    print("-" * 50)
+
+    print("For different use cases, consider these cache types:")
+    print()
+
+    print("🔹 Memory-Constrained Systems:")
+    print("   uv run mlx-server-nano --cache-type quantizedkvcache")
+    print("   → Reduces memory usage by 50-75%")
+    print()
+
+    print("🔹 Streaming Applications:")
+    print(
+        "   uv run mlx-server-nano --cache-type rotatingkvcache --cache-max-size 2000"
+    )
+    print("   → Fixed memory footprint, prevents memory growth")
+    print()
+
+    print("🔹 Batch Processing:")
+    print(
+        "   uv run mlx-server-nano --cache-type chunkedkvcache --cache-chunk-size 256"
+    )
+    print("   → Optimized for parallel processing and high throughput")
+    print()
+
+    print("🔹 Context-Heavy Applications:")
+    print("   uv run mlx-server-nano --cache-type concatenatekvcache")
+    print("   → Best context preservation for reasoning tasks")
+    print()
+
+    print("🔹 Production Monitoring:")
+    print("   export MLX_LOG_LEVEL=DEBUG")
+    print("   → Enable detailed cache performance logging")
+
+
 def main():
     """Run the cache performance demonstration."""
     print("To run this example, make sure you have MLX Server Nano installed:")
@@ -145,7 +281,14 @@ def main():
     print()
 
     try:
+        # Original caching performance demonstration
         results = demonstrate_caching_performance()
+
+        # New cache types performance demonstration
+        cache_results = demonstrate_cache_types_performance()
+
+        # Optimization recommendations
+        print_optimization_recommendations()
 
         print("\n🎯 Summary:")
         print("-" * 30)
@@ -159,6 +302,27 @@ def main():
             print("   • Longer conversation histories")
             print("   • More complex prompts")
             print("   • Multiple back-and-forth exchanges")
+
+        if cache_results:
+            print("\n⚡ Cache Manager Performance:")
+            print(f"   • Cache type: {cache_results['cache_type']}")
+            print(
+                f"   • Manager creation: {cache_results['creation_time'] * 1000:.2f}ms"
+            )
+            print(
+                f"   • Cache instance: {cache_results['cache_creation_time'] * 1000:.2f}ms"
+            )
+            print(
+                f"   • Statistics retrieval: {cache_results['stats_time'] * 1000:.2f}ms"
+            )
+
+        print("\n🔄 To test different cache types:")
+        print(
+            "   MLX_CACHE_TYPE=QuantizedKVCache python examples/cache_performance_example.py"
+        )
+        print(
+            "   MLX_CACHE_TYPE=RotatingKVCache python examples/cache_performance_example.py"
+        )
 
     except KeyboardInterrupt:
         print("\n\nExample interrupted by user.")
