@@ -31,6 +31,99 @@ from .tool_calling import parse_tool_calls, _contains_tool_calls
 logger = logging.getLogger(__name__)
 
 
+def _get_cache_info(conv_state) -> dict:
+    """Extract meaningful cache information for logging."""
+    cache_info = {
+        "type": "None",
+        "config": "",
+        "layers_total": 0,
+        "layers_populated": 0,
+        "estimated_tokens": 0,
+        "estimated_memory_mb": 0.0,
+    }
+
+    if not conv_state.prompt_cache or len(conv_state.prompt_cache) == 0:
+        return cache_info
+
+    # Get cache type from config
+    cache_type = config.cache_type.value
+    cache_info["type"] = cache_type
+    cache_info["layers_total"] = len(conv_state.prompt_cache)
+
+    # Add configuration details based on cache type
+    if cache_type == "QuantizedKVCache":
+        cache_info["config"] = f"({config.cache_quantization_bits}-bit)"
+    elif cache_type == "RotatingKVCache":
+        cache_info["config"] = f"(max_size={config.cache_max_size})"
+    elif cache_type == "ChunkedKVCache":
+        cache_info["config"] = f"(chunk_size={config.cache_chunk_size})"
+
+    # Count populated layers and estimate cache size
+    populated_layers = 0
+    total_key_elements = 0
+
+    for cache_entry in conv_state.prompt_cache:
+        if hasattr(cache_entry, "keys") and hasattr(cache_entry, "values"):
+            has_keys = cache_entry.keys is not None
+            has_values = cache_entry.values is not None
+
+            if has_keys or has_values:
+                populated_layers += 1
+
+                # Estimate token count from key dimensions
+                if has_keys:
+                    try:
+                        key_shape = None
+                        if cache_type == "QuantizedKVCache":
+                            # QuantizedKVCache stores keys as tuple (quantized_data, scales, zeros)
+                            if (
+                                isinstance(cache_entry.keys, tuple)
+                                and len(cache_entry.keys) > 0
+                            ):
+                                key_shape = (
+                                    cache_entry.keys[0].shape
+                                    if hasattr(cache_entry.keys[0], "shape")
+                                    else None
+                                )
+                        else:
+                            # Standard cache types store keys as single array
+                            key_shape = (
+                                cache_entry.keys.shape
+                                if hasattr(cache_entry.keys, "shape")
+                                else None
+                            )
+
+                        if key_shape and len(key_shape) >= 3:
+                            # Shape is typically (batch, heads, sequence_length, head_dim)
+                            sequence_length = key_shape[2]
+                            head_dim = (
+                                key_shape[3] if len(key_shape) > 3 else key_shape[2]
+                            )
+                            total_key_elements += sequence_length * head_dim
+                    except (AttributeError, IndexError, TypeError):
+                        # Fallback if shape analysis fails
+                        pass
+
+    cache_info["layers_populated"] = populated_layers
+
+    # Estimate tokens and memory (rough approximations)
+    if total_key_elements > 0:
+        # Very rough estimate: assume average token uses ~100 elements across all layers
+        cache_info["estimated_tokens"] = (
+            max(1, total_key_elements // (populated_layers * 100))
+            if populated_layers > 0
+            else 0
+        )
+
+        # Memory estimation (very rough): 4 bytes per float32 element for keys + values
+        elements_per_mb = 1024 * 1024 / 4  # ~262K elements per MB for float32
+        cache_info["estimated_memory_mb"] = round(
+            (total_key_elements * 2) / elements_per_mb, 1
+        )  # *2 for keys+values
+
+    return cache_info
+
+
 def _setup_generation_kwargs(model_name: str, **kwargs) -> dict:
     """
     Setup generation parameters for MLX models.
@@ -342,33 +435,35 @@ def generate_response_with_tools_cached(
     generation_kwargs = _setup_generation_kwargs(model_name, **kwargs)
     logger.info(f"Cached generation parameters: {generation_kwargs}")
 
+    # Get cache information for logging
+    cache_info = _get_cache_info(conv_state)
+
     # Generate text response with prompt caching
     try:
         logger.debug(
             f"Starting cached text generation for conversation: {conv_state.conversation_id}"
         )
-        logger.debug(
-            f"Prompt cache state - type: {type(conv_state.prompt_cache)}, "
-            f"length: {len(conv_state.prompt_cache) if conv_state.prompt_cache else 'None'}"
-        )
 
-        # Log detailed cache state for debugging
-        if conv_state.prompt_cache and len(conv_state.prompt_cache) > 0:
-            # Check if any cache entries have data
-            cache_has_data = False
-            for i, cache_entry in enumerate(
-                conv_state.prompt_cache[:3]
-            ):  # Check first 3 layers
-                if hasattr(cache_entry, "keys") and hasattr(cache_entry, "values"):
-                    if cache_entry.keys is not None or cache_entry.values is not None:
-                        cache_has_data = True
-                        logger.debug(
-                            f"Cache layer {i} has data: keys={cache_entry.keys is not None}, values={cache_entry.values is not None}"
-                        )
-                        break
-            logger.debug(f"Cache contains data: {cache_has_data}")
+        # Log meaningful cache information
+        if cache_info["type"] != "None":
+            logger.info(
+                f"Cache: {cache_info['type']} {cache_info['config']} with {cache_info['layers_total']} model layers"
+                + (
+                    f", {cache_info['estimated_tokens']} cached tokens"
+                    if cache_info["estimated_tokens"] > 0
+                    else ""
+                )
+            )
+            logger.debug(
+                f"Cache state: {cache_info['layers_populated']}/{cache_info['layers_total']} layers populated"
+                + (
+                    f", ~{cache_info['estimated_memory_mb']}MB memory usage"
+                    if cache_info["estimated_memory_mb"] > 0
+                    else ""
+                )
+            )
         else:
-            logger.debug("Cache is empty or None")
+            logger.debug("Cache is empty or not initialized")
 
         # Use MLX-LM's generate with prompt_cache parameter
         # This preserves all auto-stop functionality while adding caching
@@ -523,33 +618,35 @@ def generate_response_stream_cached(
     generation_kwargs = _setup_generation_kwargs(model_name, **kwargs)
     logger.info(f"Cached streaming generation parameters: {generation_kwargs}")
 
+    # Get cache information for logging
+    cache_info = _get_cache_info(conv_state)
+
     try:
         logger.debug(
             f"Starting cached streaming text generation with stream_generate "
             f"for conversation: {conv_state.conversation_id}"
         )
-        logger.debug(
-            f"Prompt cache state - type: {type(conv_state.prompt_cache)}, "
-            f"length: {len(conv_state.prompt_cache) if conv_state.prompt_cache else 'None'}"
-        )
 
-        # Log detailed cache state for debugging
-        if conv_state.prompt_cache and len(conv_state.prompt_cache) > 0:
-            # Check if any cache entries have data
-            cache_has_data = False
-            for i, cache_entry in enumerate(
-                conv_state.prompt_cache[:3]
-            ):  # Check first 3 layers
-                if hasattr(cache_entry, "keys") and hasattr(cache_entry, "values"):
-                    if cache_entry.keys is not None or cache_entry.values is not None:
-                        cache_has_data = True
-                        logger.debug(
-                            f"Streaming - Cache layer {i} has data: keys={cache_entry.keys is not None}, values={cache_entry.values is not None}"
-                        )
-                        break
-            logger.debug(f"Streaming - Cache contains data: {cache_has_data}")
+        # Log meaningful cache information
+        if cache_info["type"] != "None":
+            logger.info(
+                f"Streaming Cache: {cache_info['type']} {cache_info['config']} with {cache_info['layers_total']} model layers"
+                + (
+                    f", {cache_info['estimated_tokens']} cached tokens"
+                    if cache_info["estimated_tokens"] > 0
+                    else ""
+                )
+            )
+            logger.debug(
+                f"Streaming cache state: {cache_info['layers_populated']}/{cache_info['layers_total']} layers populated"
+                + (
+                    f", ~{cache_info['estimated_memory_mb']}MB memory usage"
+                    if cache_info["estimated_memory_mb"] > 0
+                    else ""
+                )
+            )
         else:
-            logger.debug("Streaming - Cache is empty or None")
+            logger.debug("Streaming - Cache is empty or not initialized")
 
         # Use MLX-LM's stream_generate with prompt_cache parameter
         # This preserves ALL auto-stop functionality while adding caching
