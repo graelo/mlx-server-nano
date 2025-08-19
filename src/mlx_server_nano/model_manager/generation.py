@@ -235,6 +235,10 @@ def generate_response_with_tools(
         logger.error(f"Failed to format messages: {e}", exc_info=True)
         raise
 
+    # Count tokens in the prompt (prompt is a list of token IDs)
+    token_count = len(prompt)
+    logger.info(f"Request token count: {token_count} tokens")
+
     # Setup generation parameters
     generation_kwargs = _setup_generation_kwargs(model_name, **kwargs)
     logger.info(f"Generation parameters: {generation_kwargs}")
@@ -316,6 +320,10 @@ def generate_response_stream(
     except Exception as e:
         logger.error(f"Failed to format messages: {e}", exc_info=True)
         raise
+
+    # Count tokens in the prompt (prompt is a list of token IDs)
+    token_count = len(prompt)
+    logger.info(f"Request token count: {token_count} tokens")
 
     # Setup generation parameters
     generation_kwargs = _setup_generation_kwargs(model_name, **kwargs)
@@ -430,6 +438,10 @@ def generate_response_with_tools_cached(
     except Exception as e:
         logger.error(f"Failed to format messages: {e}", exc_info=True)
         raise
+
+    # Count tokens in the prompt (prompt is a list of token IDs)
+    token_count = len(prompt)
+    logger.info(f"Request token count: {token_count} tokens")
 
     # Setup generation parameters
     generation_kwargs = _setup_generation_kwargs(model_name, **kwargs)
@@ -613,6 +625,10 @@ def generate_response_stream_cached(
             f"Failed to format messages for cached streaming: {e}", exc_info=True
         )
         raise
+
+    # Count tokens in the prompt (prompt is a list of token IDs)
+    token_count = len(prompt)
+    logger.info(f"Request token count: {token_count} tokens")
 
     # Setup generation parameters
     generation_kwargs = _setup_generation_kwargs(model_name, **kwargs)
