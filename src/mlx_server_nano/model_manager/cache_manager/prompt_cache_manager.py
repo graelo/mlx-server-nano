@@ -131,66 +131,71 @@ class PromptCacheManager(CacheManager):
         """Create a standard KVCache."""
         try:
             from mlx_lm.models.cache import KVCache
+        except ImportError as e:
+            raise RuntimeError(
+                "MLX-LM KVCache not available. Please install MLX-LM: pip install mlx-lm"
+            ) from e
 
-            cache = KVCache()
-            logger.debug("Created KVCache")
-            return cache
-        except ImportError:
-            logger.warning("MLX-LM KVCache not available")
-            return []
+        cache = KVCache()
+        logger.debug("Created KVCache")
+        return cache
 
     def _create_quantized_kv_cache(self) -> Any:
         """Create a QuantizedKVCache with specified quantization settings."""
         try:
             from mlx_lm.models.cache import QuantizedKVCache
+        except ImportError as e:
+            raise RuntimeError(
+                "MLX-LM QuantizedKVCache not available. Please install MLX-LM: pip install mlx-lm"
+            ) from e
 
-            cache = QuantizedKVCache(
-                bits=self.quantization_bits, group_size=self.quantization_group_size
-            )
-            logger.debug(
-                f"Created QuantizedKVCache with {self.quantization_bits} bits, "
-                f"group_size {self.quantization_group_size}"
-            )
-            return cache
-        except ImportError:
-            logger.warning("MLX-LM QuantizedKVCache not available")
-            return []
+        cache = QuantizedKVCache(
+            bits=self.quantization_bits, group_size=self.quantization_group_size
+        )
+        logger.debug(
+            f"Created QuantizedKVCache with {self.quantization_bits} bits, "
+            f"group_size {self.quantization_group_size}"
+        )
+        return cache
 
     def _create_rotating_kv_cache(self) -> Any:
         """Create a RotatingKVCache with specified max tokens."""
         try:
             from mlx_lm.models.cache import RotatingKVCache
+        except ImportError as e:
+            raise RuntimeError(
+                "MLX-LM RotatingKVCache not available. Please install MLX-LM: pip install mlx-lm"
+            ) from e
 
-            cache = RotatingKVCache(max_size=self.max_tokens)
-            logger.debug(f"Created RotatingKVCache with max_size {self.max_tokens}")
-            return cache
-        except ImportError:
-            logger.warning("MLX-LM RotatingKVCache not available")
-            return []
+        cache = RotatingKVCache(max_size=self.max_tokens)
+        logger.debug(f"Created RotatingKVCache with max_size {self.max_tokens}")
+        return cache
 
     def _create_chunked_kv_cache(self) -> Any:
         """Create a ChunkedKVCache with specified chunk size."""
         try:
             from mlx_lm.models.cache import ChunkedKVCache
+        except ImportError as e:
+            raise RuntimeError(
+                "MLX-LM ChunkedKVCache not available. Please install MLX-LM: pip install mlx-lm"
+            ) from e
 
-            cache = ChunkedKVCache(chunk_size=self.chunk_size)
-            logger.debug(f"Created ChunkedKVCache with chunk_size {self.chunk_size}")
-            return cache
-        except ImportError:
-            logger.warning("MLX-LM ChunkedKVCache not available")
-            return []
+        cache = ChunkedKVCache(chunk_size=self.chunk_size)
+        logger.debug(f"Created ChunkedKVCache with chunk_size {self.chunk_size}")
+        return cache
 
     def _create_concatenate_kv_cache(self) -> Any:
         """Create a ConcatenateKVCache for multiple input scenarios."""
         try:
             from mlx_lm.models.cache import ConcatenateKVCache
+        except ImportError as e:
+            raise RuntimeError(
+                "MLX-LM ConcatenateKVCache not available. Please install MLX-LM: pip install mlx-lm"
+            ) from e
 
-            cache = ConcatenateKVCache()
-            logger.debug("Created ConcatenateKVCache")
-            return cache
-        except ImportError:
-            logger.warning("MLX-LM ConcatenateKVCache not available")
-            return []
+        cache = ConcatenateKVCache()
+        logger.debug("Created ConcatenateKVCache")
+        return cache
 
     def get_conversation_cache(
         self,

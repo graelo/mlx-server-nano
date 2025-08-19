@@ -48,8 +48,14 @@ class ConversationState:
     def _create_prompt_cache(self, model):
         """Create prompt cache using MLX-LM's cache types based on configuration."""
         if model is None:
-            # If no model provided, return empty list as fallback
-            return []
+            raise ValueError("Model is required for cache initialization")
+
+        # Get the number of layers in the model to create the proper cache structure
+        num_layers = self._get_model_num_layers(model)
+        if num_layers is None:
+            raise ValueError(
+                "Could not determine number of model layers for cache initialization"
+            )
 
         try:
             from mlx_lm.models.cache import (
@@ -59,45 +65,80 @@ class ConversationState:
                 ChunkedKVCache,
                 ConcatenateKVCache,
             )
+        except ImportError as e:
+            raise RuntimeError(
+                "MLX-LM cache module is not available. Please install MLX-LM: pip install mlx-lm"
+            ) from e
 
-            cache_type = config.cache_type.value  # Get string value from enum
+        cache_type = config.cache_type.value  # Get string value from enum
 
+        try:
+            # Create a list of cache objects, one for each model layer
             if cache_type == "KVCache":
-                cache = KVCache()
-                logger.debug("Created KVCache")
+                cache_list = [KVCache() for _ in range(num_layers)]
+                logger.debug(f"Created {num_layers} KVCache objects")
             elif cache_type == "QuantizedKVCache":
-                cache = QuantizedKVCache(bits=config.cache_quantization_bits)
+                cache_list = [
+                    QuantizedKVCache(bits=config.cache_quantization_bits)
+                    for _ in range(num_layers)
+                ]
                 logger.debug(
-                    f"Created QuantizedKVCache with {config.cache_quantization_bits} bits"
+                    f"Created {num_layers} QuantizedKVCache objects with {config.cache_quantization_bits} bits"
                 )
             elif cache_type == "RotatingKVCache":
-                cache = RotatingKVCache(max_size=config.cache_max_size)
+                cache_list = [
+                    RotatingKVCache(max_size=config.cache_max_size)
+                    for _ in range(num_layers)
+                ]
                 logger.debug(
-                    f"Created RotatingKVCache with max_size={config.cache_max_size}"
+                    f"Created {num_layers} RotatingKVCache objects with max_size={config.cache_max_size}"
                 )
             elif cache_type == "ChunkedKVCache":
-                cache = ChunkedKVCache(chunk_size=config.cache_chunk_size)
+                cache_list = [
+                    ChunkedKVCache(chunk_size=config.cache_chunk_size)
+                    for _ in range(num_layers)
+                ]
                 logger.debug(
-                    f"Created ChunkedKVCache with chunk_size={config.cache_chunk_size}"
+                    f"Created {num_layers} ChunkedKVCache objects with chunk_size={config.cache_chunk_size}"
                 )
             elif cache_type == "ConcatenateKVCache":
-                cache = ConcatenateKVCache()
-                logger.debug("Created ConcatenateKVCache")
+                cache_list = [ConcatenateKVCache() for _ in range(num_layers)]
+                logger.debug(f"Created {num_layers} ConcatenateKVCache objects")
+            else:
+                raise ValueError(
+                    f"Unknown cache type: {cache_type}. Supported types: KVCache, QuantizedKVCache, RotatingKVCache, ChunkedKVCache, ConcatenateKVCache"
+                )
+
+            return cache_list
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to create {config.cache_type.value} cache: {e}"
+            ) from e
+
+    def _get_model_num_layers(self, model):
+        """Get the number of layers in the model for cache initialization."""
+        try:
+            # Try different common patterns for accessing layer count
+            if hasattr(model, "model") and hasattr(model.model, "layers"):
+                return len(model.model.layers)
+            elif hasattr(model, "layers"):
+                return len(model.layers)
+            elif hasattr(model, "transformer") and hasattr(model.transformer, "layers"):
+                return len(model.transformer.layers)
+            elif hasattr(model, "config") and hasattr(
+                model.config, "num_hidden_layers"
+            ):
+                return model.config.num_hidden_layers
+            elif hasattr(model, "config") and hasattr(model.config, "num_layers"):
+                return model.config.num_layers
             else:
                 logger.warning(
-                    f"Unknown cache type: {cache_type}, falling back to KVCache"
+                    "Could not determine model layer count, using default of 32"
                 )
-                cache = KVCache()
-
-            return cache
-        except ImportError:
-            logger.warning("MLX-LM cache module not available, using empty list")
-            return []
+                return 32  # Reasonable default for most transformer models
         except Exception as e:
-            logger.warning(
-                f"Failed to create {config.cache_type.value} cache: {e}, using empty list"
-            )
-            return []
+            logger.warning(f"Error determining model layers: {e}, using default of 32")
+            return 32
 
     def update_usage(self, messages: List[Message]):
         """Update conversation state with new messages."""
@@ -110,58 +151,114 @@ class ConversationState:
 
     def _trim_cache_if_needed(self):
         """Trim cache if it exceeds optimal size for performance."""
-        if not self.prompt_cache or len(self.prompt_cache) == 0:
+        if not self.prompt_cache:
             return
 
-        try:
-            from mlx_lm.models.cache import can_trim_prompt_cache, trim_prompt_cache
+        # Handle list of cache objects (proper MLX-LM format)
+        if isinstance(self.prompt_cache, list):
+            if len(self.prompt_cache) == 0:
+                return
 
-            # Check if cache can be trimmed and if it's getting large
-            if can_trim_prompt_cache(self.prompt_cache):
-                # Check current cache size
-                if (
-                    hasattr(self.prompt_cache[0], "keys")
-                    and self.prompt_cache[0].keys is not None
-                ):
-                    current_size = (
-                        self.prompt_cache[0].keys.shape[2]
-                        if len(self.prompt_cache[0].keys.shape) > 2
-                        else 0
-                    )
+            try:
+                from mlx_lm.models.cache import can_trim_prompt_cache, trim_prompt_cache
 
-                    # If cache is larger than 512 tokens, trim to 256 tokens for optimal performance
-                    if current_size > 512:
-                        tokens_to_trim = current_size - 256
-                        logger.debug(
-                            f"Trimming cache from {current_size} to 256 tokens (trimming {tokens_to_trim})"
-                        )
+                # Check if cache can be trimmed
+                if can_trim_prompt_cache(self.prompt_cache):
+                    # Check current cache size from the first layer
+                    if (
+                        hasattr(self.prompt_cache[0], "keys")
+                        and self.prompt_cache[0].keys is not None
+                    ):
+                        # Handle different cache key structures:
+                        # - KVCache: keys is a single MLX array
+                        # - QuantizedKVCache: keys is a tuple of (quantized_data, scales, zeros)
+                        cache_keys = self.prompt_cache[0].keys
 
-                        # trim_prompt_cache modifies the cache in place and returns the trimmed cache
-                        trim_prompt_cache(self.prompt_cache, tokens_to_trim)
-                        # Check if the operation succeeded by checking cache size after
-                        if (
-                            hasattr(self.prompt_cache[0], "keys")
-                            and self.prompt_cache[0].keys is not None
-                        ):
-                            new_size = (
-                                self.prompt_cache[0].keys.shape[2]
-                                if len(self.prompt_cache[0].keys.shape) > 2
-                                else 0
-                            )
-                            actual_trimmed = current_size - new_size
-                            if actual_trimmed > 0:
-                                logger.info(
-                                    f"Successfully trimmed {actual_trimmed} tokens from cache for conversation {self.conversation_id}"
-                                )
+                        try:
+                            if isinstance(cache_keys, tuple):
+                                # QuantizedKVCache: use the first element (quantized data)
+                                keys_array = cache_keys[0]
                             else:
-                                logger.debug(
-                                    "Cache trim operation completed but may not have reduced size as expected"
-                                )
+                                # KVCache: use the keys array directly
+                                keys_array = cache_keys
 
-        except ImportError:
-            logger.debug("MLX-LM cache trimming not available")
-        except Exception as e:
-            logger.warning(f"Failed to trim cache: {e}")
+                            # Safely check if we can get sequence length
+                            try:
+                                if hasattr(keys_array, "shape"):
+                                    shape = keys_array.shape  # type: ignore
+                                    if hasattr(shape, "__len__") and len(shape) > 2:  # type: ignore
+                                        current_size = shape[2]  # type: ignore
+                                    else:
+                                        current_size = 0
+                                else:
+                                    current_size = 0
+                            except (AttributeError, IndexError, TypeError):
+                                current_size = 0
+                        except (AttributeError, IndexError, TypeError):
+                            # If we can't determine size, skip trimming
+                            current_size = 0
+
+                        # If cache is larger than 512 tokens, trim to 256 tokens for optimal performance
+                        if current_size > 512:
+                            tokens_to_trim = current_size - 256
+                            logger.debug(
+                                f"Trimming cache from {current_size} to 256 tokens (trimming {tokens_to_trim} tokens)"
+                            )
+
+                            # trim_prompt_cache modifies the cache in place
+                            trim_prompt_cache(self.prompt_cache, tokens_to_trim)
+
+                            # Check if the operation succeeded
+                            if (
+                                hasattr(self.prompt_cache[0], "keys")
+                                and self.prompt_cache[0].keys is not None
+                            ):
+                                # Check new size with same logic
+                                cache_keys = self.prompt_cache[0].keys
+                                try:
+                                    if isinstance(cache_keys, tuple):
+                                        keys_array = cache_keys[0]
+                                    else:
+                                        keys_array = cache_keys
+
+                                    if hasattr(keys_array, "shape"):
+                                        shape = keys_array.shape  # type: ignore
+                                        if hasattr(shape, "__len__") and len(shape) > 2:  # type: ignore
+                                            new_size = shape[2]  # type: ignore
+                                        else:
+                                            new_size = 0
+                                    else:
+                                        new_size = 0
+                                except (AttributeError, IndexError, TypeError):
+                                    new_size = 0
+
+                                actual_trimmed = current_size - new_size
+                                if actual_trimmed > 0:
+                                    logger.info(
+                                        f"Successfully trimmed {actual_trimmed} tokens from cache"
+                                    )
+                                else:
+                                    logger.debug(
+                                        "Cache trim operation completed but may not have reduced size as expected"
+                                    )
+                        else:
+                            logger.debug(
+                                f"Cache size {current_size} is within optimal range"
+                            )
+                    else:
+                        logger.debug("Cache keys not available for size check")
+                else:
+                    logger.debug("Cache cannot be trimmed")
+            except ImportError:
+                logger.debug("MLX-LM cache trimming functions not available")
+            except Exception as e:
+                logger.warning(f"Cache trimming failed: {e}")
+        else:
+            # This should not happen with the new cache creation logic
+            logger.warning(
+                f"Unexpected cache type: {type(self.prompt_cache)}. Expected list of cache objects."
+            )
+            return
 
     def should_expire(self) -> bool:
         """Check if this conversation should be expired based on idle time."""

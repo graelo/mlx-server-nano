@@ -14,7 +14,25 @@ A lightweight, OpenAI-compatible API server for running language models on Apple
 
 ## MLX-LM Prompt Caching
 
-MLX Server Nano includes advanced **prompt caching** capabilities that provide substantial performance improvements for conversational interactions:
+MLX Server Nano includes advanced **prompt caching** capabilities that provide substantial performance improvements for conversational interactions. The system supports **multiple cache types** to optimize for different use cases and hardware constraints.
+
+### Cache Types Available
+
+**5 Different Cache Types for Optimal Performance:**
+
+1. **KVCache** (Default) - Standard cache for general use
+2. **QuantizedKVCache** - Memory-efficient quantized cache (up to 50% memory reduction)
+3. **RotatingKVCache** - Automatic cleanup for long conversations
+4. **ChunkedKVCache** - Chunked processing for memory efficiency
+5. **ConcatenateKVCache** - Concatenated cache management
+
+**Choose the right cache type based on your needs:**
+- **Memory constrained?** → Use `QuantizedKVCache` or `ChunkedKVCache`
+- **Long conversations?** → Use `RotatingKVCache`
+- **General purpose?** → Use `KVCache` (default)
+- **Batch processing?** → Use `ConcatenateKVCache`
+
+See the [Cache Management Guide](docs/CACHE_MANAGEMENT.md) for detailed comparison and configuration guidance.
 
 ### How It Works
 
@@ -89,6 +107,25 @@ curl -X POST http://localhost:8000/v1/chat/completions \
   }'
 ```
 
+### Using Different Cache Types
+
+**Start server with specific cache type:**
+
+```bash
+# Memory-efficient quantized cache
+mlx-server-nano --cache-type QuantizedKVCache
+
+# Rotating cache for long conversations
+mlx-server-nano --cache-type RotatingKVCache --cache-max-size 2000
+
+# Chunked cache for memory constraints
+mlx-server-nano --cache-type ChunkedKVCache --cache-chunk-size 256
+
+# Or use environment variables
+export MLX_CACHE_TYPE=QuantizedKVCache
+mlx-server-nano
+```
+
 ### Explicit Conversation IDs
 
 For even more control, you can specify explicit conversation IDs:
@@ -143,6 +180,15 @@ mlx-server-nano --log-level DEBUG
 # Start with auto-reload for development
 mlx-server-nano --reload
 
+# Start with specific cache type
+mlx-server-nano --cache-type QuantizedKVCache
+
+# Start with custom cache configuration
+mlx-server-nano --cache-type RotatingKVCache --cache-max-size 2000 --max-conversations 50
+
+# Start with chunked cache for memory efficiency
+mlx-server-nano --cache-type ChunkedKVCache --cache-chunk-size 256
+
 # Show all options
 mlx-server-nano --help
 ```
@@ -151,10 +197,19 @@ The server will start on `http://localhost:8000` by default.
 
 ### Command Line Options
 
+**Basic Server Options:**
 - `--host`: Host to bind to (default: 0.0.0.0)
 - `--port`: Port to bind to (default: 8000)  
 - `--log-level`: Log level (DEBUG, INFO, WARNING, ERROR, default: INFO)
 - `--reload`: Enable auto-reload for development
+
+**Cache Configuration Options:**
+- `--cache-type`: Cache type - KVCache, QuantizedKVCache, RotatingKVCache, ChunkedKVCache, ConcatenateKVCache (default: KVCache)
+- `--cache-max-size`: Maximum cache size for RotatingKVCache (default: 1000)
+- `--cache-chunk-size`: Chunk size for ChunkedKVCache (default: 512)
+- `--max-conversations`: Maximum number of cached conversations (default: 10)
+- `--cache-enabled` / `--no-cache-enabled`: Enable/disable conversation caching (default: enabled)
+- `--cache-timeout`: Cache idle timeout in seconds (default: 300)
 
 ### Environment Variables
 
@@ -183,6 +238,11 @@ export MLX_AUTO_DETECT_CONVERSATIONS=true
 export MLX_MAX_CONVERSATIONS=100
 export MLX_CONVERSATION_IDLE_TIMEOUT=3600
 export MLX_CONVERSATION_DETECTION_THRESHOLD=0.8
+
+# Advanced Cache Type Configuration
+export MLX_CACHE_TYPE=KVCache                    # KVCache, QuantizedKVCache, RotatingKVCache, ChunkedKVCache, ConcatenateKVCache
+export MLX_CACHE_MAX_SIZE=1000                   # For RotatingKVCache
+export MLX_CACHE_CHUNK_SIZE=512                  # For ChunkedKVCache
 ```
 
 ### API Usage
@@ -278,10 +338,12 @@ Real-world benchmarks show significant performance improvements with prompt cach
 
 ### Performance Tips
 
-1. **Use conversation continuations**: Structure your API calls to build on previous messages
-2. **Batch related requests**: Group related interactions to maximize cache hits
-3. **Monitor cache stats**: Use debug logging to verify cache performance
-4. **Tune detection threshold**: Adjust `MLX_CONVERSATION_DETECTION_THRESHOLD` for your use case
+1. **Choose the right cache type**: Select cache type based on your use case (see [Cache Management Guide](docs/CACHE_MANAGEMENT.md))
+2. **Use conversation continuations**: Structure your API calls to build on previous messages
+3. **Batch related requests**: Group related interactions to maximize cache hits
+4. **Monitor cache stats**: Use debug logging to verify cache performance
+5. **Tune detection threshold**: Adjust `MLX_CONVERSATION_DETECTION_THRESHOLD` for your use case
+6. **Memory optimization**: Use `QuantizedKVCache` or `ChunkedKVCache` for memory-constrained environments
 
 ## Development
 

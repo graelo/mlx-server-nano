@@ -397,9 +397,23 @@ def generate_response_with_tools_cached(
                         logger.debug(
                             f"After gen - Cache layer {i} populated: keys={cache_entry.keys is not None}, values={cache_entry.values is not None}"
                         )
-                        if hasattr(cache_entry.keys, "shape"):
+                        # Handle different cache key structures for debug logging
+                        try:
+                            if cache_entry.keys is not None:
+                                if isinstance(cache_entry.keys, tuple):
+                                    # QuantizedKVCache: keys is a tuple
+                                    logger.debug(
+                                        f"After gen - Cache layer {i} quantized keys: {len(cache_entry.keys)} components, "
+                                        f"main shape: {cache_entry.keys[0].shape if hasattr(cache_entry.keys[0], 'shape') else 'unknown'}"
+                                    )
+                                elif hasattr(cache_entry.keys, "shape"):
+                                    # KVCache: keys is a single array
+                                    logger.debug(
+                                        f"After gen - Cache layer {i} keys shape: {cache_entry.keys.shape}"  # type: ignore
+                                    )
+                        except (AttributeError, IndexError, TypeError):
                             logger.debug(
-                                f"After gen - Cache layer {i} keys shape: {cache_entry.keys.shape}"
+                                f"After gen - Cache layer {i} keys structure unknown"
                             )
                         break
             logger.debug(f"Cache was populated during generation: {cache_populated}")
@@ -572,9 +586,23 @@ def generate_response_stream_cached(
                         logger.debug(
                             f"After streaming - Cache layer {i} populated: keys={cache_entry.keys is not None}, values={cache_entry.values is not None}"
                         )
-                        if hasattr(cache_entry.keys, "shape"):
+                        # Handle different cache key structures for debug logging
+                        try:
+                            if cache_entry.keys is not None:
+                                if isinstance(cache_entry.keys, tuple):
+                                    # QuantizedKVCache: keys is a tuple
+                                    logger.debug(
+                                        f"After streaming - Cache layer {i} quantized keys: {len(cache_entry.keys)} components, "
+                                        f"main shape: {cache_entry.keys[0].shape if hasattr(cache_entry.keys[0], 'shape') else 'unknown'}"
+                                    )
+                                elif hasattr(cache_entry.keys, "shape"):
+                                    # KVCache: keys is a single array
+                                    logger.debug(
+                                        f"After streaming - Cache layer {i} keys shape: {cache_entry.keys.shape}"  # type: ignore
+                                    )
+                        except (AttributeError, IndexError, TypeError):
                             logger.debug(
-                                f"After streaming - Cache layer {i} keys shape: {cache_entry.keys.shape}"
+                                f"After streaming - Cache layer {i} keys structure unknown"
                             )
                         break
             logger.debug(

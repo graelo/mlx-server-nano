@@ -8,9 +8,10 @@ Welcome to the MLX Server Nano documentation. This directory contains comprehens
 
 - **[Cache Management Guide](CACHE_MANAGEMENT.md)** - Comprehensive guide to the cache management system
   - Multiple cache types (KVCache, QuantizedKVCache, RotatingKVCache, ChunkedKVCache, ConcatenateKVCache)
+  - CLI and environment variable configuration options
   - Performance characteristics and use case recommendations
-  - Configuration and monitoring
-  - Best practices and troubleshooting
+  - Configuration, monitoring, and troubleshooting
+  - Best practices and advanced usage patterns
 
 - **[Testing Guide](TESTING.md)** - Complete testing documentation
   - Test structure and categories
@@ -22,8 +23,8 @@ Welcome to the MLX Server Nano documentation. This directory contains comprehens
 
 ### Getting Started
 - [Main README](../README.md) - Project overview and basic setup
-- [Configuration](../README.md#configuration) - Environment variables and settings
-- [Examples](../examples/) - Working code examples
+- [Configuration](../README.md#configuration) - Environment variables, CLI options, and cache types
+- [Examples](../examples/) - Working code examples and cache performance demonstrations
 
 ### Development
 - [Testing Guide](TESTING.md) - How to run and write tests
@@ -31,7 +32,8 @@ Welcome to the MLX Server Nano documentation. This directory contains comprehens
 - [Contributing Guidelines](../README.md#contributing) - How to contribute
 
 ### Advanced Topics
-- [Cache Types Comparison](CACHE_MANAGEMENT.md#performance-characteristics) - Detailed performance comparison
+- [Cache Types Comparison](CACHE_MANAGEMENT.md#performance-characteristics) - Detailed performance comparison of all 5 cache types
+- [CLI Cache Configuration](../README.md#command-line-options) - Complete CLI options for cache management
 - [Memory Management](CACHE_MANAGEMENT.md#monitoring-and-debugging) - Monitoring and optimization
 - [Troubleshooting](CACHE_MANAGEMENT.md#troubleshooting) - Common issues and solutions
 
